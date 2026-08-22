@@ -120,6 +120,8 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
 
 ## References
 
+- Forum thread for this work (discussion, updates):
+  https://forum.armbian.com/topic/61651-odroid-m1-rk3568-npu-on-the-open-stack-rocket-kernel-driver-mesa-teflon/
 - Mesa RK3588 rocket/teflon MR (base of this work):
   https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42134
 - Vendor-stack setup on the same board (rknpu DKMS + RKNN runtime, incl.
