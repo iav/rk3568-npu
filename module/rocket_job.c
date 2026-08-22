@@ -141,7 +141,7 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 	 * hand, because reset_control wipes it behind rk_iommu's back
 	 * (rk_iommu re-programs the DTE only on runtime resume).
 	 * rk_iommu commands: 1 ENABLE_PAGING, 6 FORCE_RESET, 8 ZAP_CACHE. */
-	if (core->mmu_iomem &&
+	if (core->mmu_iomem && !job->task_desc_addr &&
 	    (rocket_cna_readl(core, S_POINTER) & BIT(16))) {
 		u32 dte = readl(core->mmu_iomem + 0x00);
 
@@ -627,7 +627,7 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 	 * complete the job, anything else is cleared and execution continues.
 	 */
 	if (raw_status & 0x1ffff)
-		dev_info(core->dev,
+		dev_dbg(core->dev,
 			 "irq raw=0x%08x status=0x%08x task_status=0x%08x\n",
 			 raw_status, rocket_pc_readl(core, INTERRUPT_STATUS),
 			 rocket_pc_readl(core, TASK_STATUS));
@@ -638,7 +638,7 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 		writel(sp & ~1u, core->dpu_iomem + 0x4); /* bank0 */
 	}
 	if (raw_status & 0x1ffff)
-		dev_info(core->dev, "dpu bs_cfg=%08x mul=%08x fmt=%08x ow=%08x brdma=%08x bs_base=%08x n5024=%08x\n",
+		dev_dbg(core->dev, "dpu bs_cfg=%08x mul=%08x fmt=%08x ow=%08x brdma=%08x bs_base=%08x n5024=%08x\n",
 			 core->dpu_iomem ? readl(core->dpu_iomem + 0x40) : 0,
 			 core->dpu_iomem ? readl(core->dpu_iomem + 0x48) : 0,
 			 core->dpu_iomem ? readl(core->dpu_iomem + 0x24) : 0, /* cube W|H */
@@ -647,12 +647,12 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 			 core->dpu_iomem ? readl(core->dpu_iomem + 0x1020) : 0,
 			 core->dpu_iomem ? readl(core->dpu_iomem + 0x1024) : 0);
 	if (raw_status & 0x1ffff)
-		dev_info(core->dev, "counters dt_wr=0x%x dt_rd=0x%x wt_rd=0x%x\n",
+		dev_dbg(core->dev, "counters dt_wr=0x%x dt_rd=0x%x wt_rd=0x%x\n",
 			 core->top_iomem ? readl(core->top_iomem + 0x34) : 0,
 			 core->top_iomem ? readl(core->top_iomem + 0x38) : 0,
 			 core->top_iomem ? readl(core->top_iomem + 0x3c) : 0);
 	else
-		dev_info_ratelimited(core->dev, "irq empty raw=0x%08x\n",
+		dev_dbg(core->dev, "irq empty raw=0x%08x\n",
 				     raw_status);
 
 	if (!(raw_status & 0x1ffff)) {
