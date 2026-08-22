@@ -1,0 +1,2384 @@
+From b79779acc5f2640ff3bb2b395df03eb2657dd2a3 Mon Sep 17 00:00:00 2001
+From: Midgy BALON <midgy971@gmail.com>
+Date: Tue, 9 Jun 2026 16:27:53 +0200
+Subject: [PATCH 01/20] rocket/teflon: add RK3568 NPU conv config support
+ (Draft)
+
+The Rocket Gallium driver / Teflon delegate currently targets the RK3588 NPU.
+The RK3568 NPU is the same NVDLA-derived IP but differs in CBUF size, several
+register layouts, and a number of encoded config values hard-coded for RK3588.
+
+This collects the TRM-derived, BSP-cross-checked config changes needed to drive
+the RK3568 NPU through rkt_regcmd.c: add CONV_CON4 + RGB_BYTELENGTH and expose
+FETCH_PIXEL_LEN in registers.xml; fix the FEATURE_MODE_CFG bit layout; set
+CBUF_BANKS for RK3568 (256 KiB / 8 banks); emit CONV_CON4 / KERNEL_GROUP /
+FETCH_PIXEL_LEN; wake all five sub-units before CNA config; use the RK3568 DCOMP
+descriptor layout; and use per-unit OP_EN writes instead of the RK3588 0x81
+broadcast.
+
+This is intentionally a Draft and is NOT correct yet: conv2d.tflite still
+produces output zero-point. Two independent causes remain (see MR description):
+(A) some conv config values are still RK3588-specific, and (B) a kernel-side
+HW compute-completion gate (a byte-exact replay of the vendor command list for
+the same conv also does not complete on the mainline rocket driver). Opening to
+get the userspace divergences on record and discuss per-SoC parameterisation.
+
+Hardware: Radxa ROCK 3B (RK3568). Mesa main. Kernel: rocket with the RK3568 RFC
+series applied. cc: Tomeu Vizoso.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/registers.xml |  18 +++-
+ src/gallium/drivers/rocket/rkt_ml.h      |   6 +-
+ src/gallium/drivers/rocket/rkt_regcmd.c  | 129 +++++++++++++++++------
+ 3 files changed, 113 insertions(+), 40 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/registers.xml b/src/gallium/drivers/rocket/registers.xml
+index 8410edab5f4..9ca3bb14bf6 100644
+--- a/src/gallium/drivers/rocket/registers.xml
++++ b/src/gallium/drivers/rocket/registers.xml
+@@ -206,6 +206,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+       <bitfield name="CONV_Y_STRIDE" low="3" high="5" type="uint"/>
+       <bitfield name="CONV_X_STRIDE" low="0" high="2" type="uint"/>
+    </reg32>
++   <reg32 offset="0x1018" name="CONV_CON4">
++      <bitfield name="RESERVED_0" low="24" high="31" type="uint"/>
++      <bitfield name="RGB_BYTELENGTH" low="0" high="23" type="uint"/>
++   </reg32>
+    <reg32 offset="0x1020" name="DATA_SIZE0">
+       <bitfield name="RESERVED_0" low="27" high="31" type="uint"/>
+       <bitfield name="DATAIN_WIDTH" low="16" high="26" type="uint"/>
+@@ -306,7 +310,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+       <bitfield name="OV4K_BYPASS" pos="31" type="uint"/>
+       <bitfield name="RESERVED_0" low="20" high="30" type="uint"/>
+       <bitfield name="WEIGHT_BURST_LEN" low="16" high="19" type="uint"/>
+-      <bitfield name="RESERVED_1" low="4" high="15" type="uint"/>
++      <bitfield name="FETCH_PIXEL_LEN" low="8" high="15" type="uint"/>
++      <bitfield name="RESERVED_1" low="4" high="7" type="uint"/>
+       <bitfield name="DATA_BURST_LEN" low="0" high="3" type="uint"/>
+    </reg32>
+    <reg32 offset="0x107C" name="DMA_CON1">
+@@ -474,14 +479,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+       <bitfield name="OP_EN" pos="0" type="uint"/>
+    </reg32>
+    <reg32 offset="0x400C" name="FEATURE_MODE_CFG">
+-      <bitfield name="COMB_USE" pos="31" type="uint"/>
++      <!-- Bit layout per RK3568 TRM Part2 page 433. Was previously
++           wrong: OUTPUT_MODE/CONV_MODE/BURST_LEN at wrong positions. -->
++      <bitfield name="RESERVED_0" pos="31" type="uint"/>
+       <bitfield name="TP_EN" pos="30" type="uint"/>
+       <bitfield name="RGP_TYPE" low="26" high="29" type="uint"/>
+       <bitfield name="NONALIGN" pos="25" type="uint"/>
+       <bitfield name="SURF_LEN" low="9" high="24" type="uint"/>
+-      <bitfield name="BURST_LEN" low="5" high="8" type="uint"/>
+-      <bitfield name="CONV_MODE" low="3" high="4" type="uint"/>
+-      <bitfield name="OUTPUT_MODE" low="1" high="2" type="uint"/>
++      <bitfield name="BURST_LEN" low="7" high="8" type="uint"/>
++      <bitfield name="RESERVED_1" pos="6" type="uint"/>
++      <bitfield name="CONV_MODE" low="4" high="5" type="uint"/>
++      <bitfield name="OUTPUT_MODE" low="1" high="3" type="uint"/>
+       <bitfield name="FLYING_MODE" pos="0" type="uint"/>
+    </reg32>
+    <reg32 offset="0x4010" name="DATA_FORMAT">
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index 7775989d3d5..9d00da4928c 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -12,7 +12,11 @@
+ 
+ // http://nvdla.org/hw/v1/ias/unit_description.html#convolution-buffer
+ #define CBUF_BANK_SIZE        32768
+-#define CBUF_BANKS            12
++/* CBUF_BANKS is SoC-specific:
++ *   RK3588: 12 banks (384 KiB CBUF)
++ *   RK3568:  8 banks (256 KiB CBUF) — per RK3568 TRM Part2 section 9.1
++ * TODO: select per-SoC at runtime via rkt_device. */
++#define CBUF_BANKS            8
+ #define CBUF_ENTRIES_PER_BANK 256
+ #define CBUF_ENTRY_SIZE       (CBUF_BANK_SIZE / CBUF_ENTRIES_PER_BANK)
+ #define FEATURE_ATOMIC_SIZE   16
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index eee2fe174fa..3c8f1a96bb5 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -46,6 +46,33 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    if (task_num > 0 && operation->reuse_weights_cbuf)
+       con0 |= CNA_CBUF_CON0_WEIGHT_REUSE(1);
+ 
++   /* BSP-order S_POINTER wakes for ALL sub-units MUST come FIRST in the
++    * regcmd (verified by BSP YOLOv5s side-by-side: slots 0-5 of BSP's
++    * regcmd are S_POINTER wakes for CNA, CMAC, ACCU, then CBUF_CON0,
++    * then DPU_S_POINTER, DPU_RDMA_S_POINTER). */
++   EMIT(REG_CNA_S_POINTER, CNA_S_POINTER_POINTER_PP_MODE(1) |
++                              CNA_S_POINTER_EXECUTER_PP_EN(1) |
++                              CNA_S_POINTER_POINTER_PP_EN(1));
++   /* CMAC (formerly "mystery" 0x400 routing target — added to XML in this patch series). */
++   emit_raw(regs, 0x401, 0x2004, 0xe);
++   EMIT(REG_CORE_S_POINTER, CORE_S_POINTER_POINTER_PP_MODE(1) |
++                              CORE_S_POINTER_EXECUTER_PP_EN(1) |
++                              CORE_S_POINTER_POINTER_PP_EN(1));
++
++   /* 2026-05-27: Move DPU + DPU_RDMA S_POINTER wakes here, BEFORE CNA
++    * configs (CBUF_CON0, DCOMP, CONV_CON1). BSP YOLOv5s/MobileNetV1 emit
++    * all 5 sub-unit S_POINTER wakes CONTIGUOUSLY at slots 0-4, then
++    * starts CNA configs. Mesa's previous order interleaved DPU wakes
++    * between CNA configs, possibly causing CNA to reject PC broadcasts
++    * (wakes not done for all sub-units). Match BSP order. */
++   EMIT(REG_DPU_S_POINTER, DPU_S_POINTER_POINTER_PP_MODE(1) |
++                              DPU_S_POINTER_EXECUTER_PP_EN(1) |
++                              DPU_S_POINTER_POINTER_PP_EN(1));
++   EMIT(REG_DPU_RDMA_RDMA_S_POINTER,
++        DPU_RDMA_RDMA_S_POINTER_POINTER_PP_MODE(1) |
++           DPU_RDMA_RDMA_S_POINTER_EXECUTER_PP_EN(1) |
++           DPU_RDMA_RDMA_S_POINTER_POINTER_PP_EN(1));
++
+    EMIT(REG_CNA_CBUF_CON0, con0);
+ 
+    EMIT(REG_CNA_DCOMP_REGNUM, 0);
+@@ -60,21 +87,28 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    if (operation->depthwise)
+       con1 |= CNA_CONV_CON1_CONV_MODE(3);
+ 
++   /* Single CONV_CON1 emit (removed duplicate that mesa originally had). */
+    EMIT(REG_CNA_CONV_CON1, con1);
+-
+-   EMIT(REG_DPU_S_POINTER, DPU_S_POINTER_POINTER_PP_MODE(1) |
+-                              DPU_S_POINTER_EXECUTER_PP_EN(1) |
+-                              DPU_S_POINTER_POINTER_PP_EN(1));
+-   EMIT(REG_DPU_RDMA_RDMA_S_POINTER,
+-        DPU_RDMA_RDMA_S_POINTER_POINTER_PP_MODE(1) |
+-           DPU_RDMA_RDMA_S_POINTER_EXECUTER_PP_EN(1) |
+-           DPU_RDMA_RDMA_S_POINTER_POINTER_PP_EN(1));
+-   EMIT(REG_CNA_CONV_CON1, con1);
++   /* CONV_CON2: KERNEL_GROUP per TRM (page 418) = (weights_kernels / 32 - 1)
++    * for int8 mode (32 kernels per group). FEATURE_GRAINS per TRM formula
++    * = y_stride + weight_height + 1 (suggested by TRM). The old "+50" value
++    * was a hack — TRM-correct formula tested 2026-05-21. */
+    EMIT(REG_CNA_CONV_CON2,
++        CNA_CONV_CON2_KERNEL_GROUP(task->weights_kernels / 32 - 1) |
+         CNA_CONV_CON2_FEATURE_GRAINS(
+-           50 + task->stride_y + 1)); /* Magic: Seems to pass the most tests */
++           task->stride_y + task->weights_height + 1));
+    EMIT(REG_CNA_CONV_CON3, CNA_CONV_CON3_CONV_X_STRIDE(task->stride_x) |
+                               CNA_CONV_CON3_CONV_Y_STRIDE(task->stride_y));
++   /* CONV_CON4: RGB_BYTELENGTH per TRM (page 418). Required to be non-zero
++    * to start CNA pipeline (verified by experiment on RK3568). For ARGB
++    * mode (3-channel RGB) this is the byte length of the input image.
++    * For non-ARGB modes the value isn't used by the conv path but the
++    * register MUST be non-zero or CNA's OP_ENABLE entry is rejected.
++    * Use input_width * input_height * input_channels as a safe per-task
++    * input byte count. */
++   EMIT(REG_CNA_CONV_CON4,
++        CNA_CONV_CON4_RGB_BYTELENGTH(
++           task->input_width * task->input_height * task->input_channels));
+    EMIT(REG_CNA_DATA_SIZE0,
+         CNA_DATA_SIZE0_DATAIN_WIDTH(task->input_width) |
+            CNA_DATA_SIZE0_DATAIN_HEIGHT(task->input_height));
+@@ -138,8 +172,14 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+         rkt_get_tensor(subgraph, operation->input_index)->phys_addr +
+            task->input_offset);
+    EMIT(REG_CNA_FC_CON2, 0);
++   /* DMA_CON0: FETCH_PIXEL_LEN (bits 15:8) is the per-surface feature fetch
++    * length. Mesa previously omitted this field, leaving it 0 which causes
++    * CNA to fetch zero feature data per surface on RK3568. Set to input
++    * width as a safe default — matches per-row fetch count. */
+    EMIT(REG_CNA_DMA_CON0,
+-        CNA_DMA_CON0_WEIGHT_BURST_LEN(15) | CNA_DMA_CON0_DATA_BURST_LEN(15));
++        CNA_DMA_CON0_WEIGHT_BURST_LEN(15) |
++        CNA_DMA_CON0_FETCH_PIXEL_LEN(task->input_width) |
++        CNA_DMA_CON0_DATA_BURST_LEN(15));
+    EMIT(REG_CNA_DMA_CON1, CNA_DMA_CON1_LINE_STRIDE(task->input_line_stride));
+    EMIT(REG_CNA_DMA_CON2, CNA_DMA_CON2_SURF_STRIDE(task->input_surface_stride));
+ 
+@@ -149,25 +189,33 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_CNA_FC_DATA_SIZE1,
+         CNA_FC_DATA_SIZE1_DMA_CHANNEL(task->input_channels));
++   /* RK3568 DCOMP layout (per BSP regcmd capture 2026-05-22):
++    *   0x1110..0x112c = DCOMP_ADDR0..7  (8 weight chunk base pointers)
++    *   0x1130..0x114c = DCOMP_AMOUNT0..7 (8 weight chunk byte amounts)
++    * RK3588 mesa has 1 ADDR + 16 AMOUNTs at 0x1140+. Use emit_raw for
++    * RK3568 BSP-correct layout: emit ADDR0 with weight base, ADDR1-7 = 0,
++    * AMOUNT0-7 = 0 (decompression disabled). */
+    EMIT(REG_CNA_DCOMP_CTRL, 0);
+    EMIT(REG_CNA_DCOMP_REGNUM, 0);
+-   EMIT(REG_CNA_DCOMP_ADDR0, rkt_resource(operation->weights)->phys_addr);
+-   EMIT(REG_CNA_DCOMP_AMOUNT0, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT1, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT2, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT3, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT4, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT5, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT6, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT7, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT8, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT9, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT10, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT11, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT12, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT13, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT14, 0);
+-   EMIT(REG_CNA_DCOMP_AMOUNT15, 0);
++   {
++      uint32_t weight_pa = rkt_resource(operation->weights)->phys_addr;
++      emit_raw(regs, CNA | 0x1, 0x1110, weight_pa);  /* DCOMP_ADDR0 */
++      emit_raw(regs, CNA | 0x1, 0x1114, 0);          /* DCOMP_ADDR1 */
++      emit_raw(regs, CNA | 0x1, 0x1118, 0);          /* DCOMP_ADDR2 */
++      emit_raw(regs, CNA | 0x1, 0x111c, 0);          /* DCOMP_ADDR3 */
++      emit_raw(regs, CNA | 0x1, 0x1120, 0);          /* DCOMP_ADDR4 */
++      emit_raw(regs, CNA | 0x1, 0x1124, 0);          /* DCOMP_ADDR5 */
++      emit_raw(regs, CNA | 0x1, 0x1128, 0);          /* DCOMP_ADDR6 */
++      emit_raw(regs, CNA | 0x1, 0x112c, 0);          /* DCOMP_ADDR7 */
++      emit_raw(regs, CNA | 0x1, 0x1130, 0);          /* DCOMP_AMOUNT0 */
++      emit_raw(regs, CNA | 0x1, 0x1134, 0);          /* DCOMP_AMOUNT1 */
++      emit_raw(regs, CNA | 0x1, 0x1138, 0);          /* DCOMP_AMOUNT2 */
++      emit_raw(regs, CNA | 0x1, 0x113c, 0);          /* DCOMP_AMOUNT3 */
++      emit_raw(regs, CNA | 0x1, 0x1140, 0);          /* DCOMP_AMOUNT4 */
++      emit_raw(regs, CNA | 0x1, 0x1144, 0);          /* DCOMP_AMOUNT5 */
++      emit_raw(regs, CNA | 0x1, 0x1148, 0);          /* DCOMP_AMOUNT6 */
++      emit_raw(regs, CNA | 0x1, 0x114c, 0);          /* DCOMP_AMOUNT7 */
++   }
+ 
+    if (task->input_channels_real == 1) {
+       EMIT(REG_CNA_CVT_CON5, 65535);
+@@ -198,13 +246,20 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+         CORE_DATAOUT_SIZE_0_DATAOUT_HEIGHT(task->output_height - 1) |
+            CORE_DATAOUT_SIZE_0_DATAOUT_WIDTH(task->output_width - 1));
+    EMIT(REG_CORE_DATAOUT_SIZE_1,
+-        CORE_DATAOUT_SIZE_1_DATAOUT_CHANNEL(task->output_channels - 1));
++        CORE_DATAOUT_SIZE_1_DATAOUT_CHANNEL(15));
+    EMIT(REG_CORE_CLIP_TRUNCATE,
+         CORE_CLIP_TRUNCATE_CLIP_TRUNCATE(operation->truncate_bits));
+    emit_raw(regs, CORE | 0x1, 0x3030, 0);
+ 
++   /* DPU_FEATURE_MODE_CFG per RK3568 TRM page 433:
++    * - BURST_LEN: 0=burst4, 1=burst8, 2=burst16.
++    * - OUTPUT_MODE: TRM documents 0=PPU and 2=outside, but BSP YOLOv5s uses
++    *   value 4 (0x108 = bit 8 burst_len=2 + bit 3 = output_mode=4).
++    *   Match BSP empirically — TRM is incomplete on output_mode codes.
++    * - CONV_MODE: 0=Direct, 3=Depthwise.
++    */
+    uint32_t feat_mode_cfg =
+-      DPU_FEATURE_MODE_CFG_BURST_LEN(15) | DPU_FEATURE_MODE_CFG_OUTPUT_MODE(2);
++      DPU_FEATURE_MODE_CFG_BURST_LEN(2) | DPU_FEATURE_MODE_CFG_OUTPUT_MODE(4);
+    if (operation->depthwise)
+       feat_mode_cfg |= DPU_FEATURE_MODE_CFG_CONV_MODE(3);
+ 
+@@ -525,10 +580,16 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TRM: before op_en, 64'h0041_xxxx_xxxx_xxxx must be set. */
+    util_dynarray_append_typed(regs, uint64_t, 0x0041000000000000);
+ 
+-   /* TRM: 64'h0081_0000_007f_0008 will set each block's op_en(CNA, CORE, ...,
+-    * PPU_RDMA). */
+-   emit_raw(regs, 0x81, REG_PC_OPERATION_ENABLE,
+-            PC_OPERATION_ENABLE_RESERVED_0(14) | PC_OPERATION_ENABLE_OP_EN(1));
++   /* Individual sub-unit OP_EN writes. The broadcast target=0x81 is
++    * RK3588-specific and not supported on RK3568. Direct writes work on both. */
++   emit_raw(regs, CNA | 0x1, REG_CNA_OPERATION_ENABLE,
++            CNA_OPERATION_ENABLE_OP_EN(1));
++   emit_raw(regs, CORE | 0x1, REG_CORE_OPERATION_ENABLE,
++            CORE_OPERATION_ENABLE_OP_EN(1));
++   emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_OPERATION_ENABLE,
++            DPU_RDMA_RDMA_OPERATION_ENABLE_OP_EN(1));
++   emit_raw(regs, DPU | 0x1, REG_DPU_OPERATION_ENABLE,
++            DPU_OPERATION_ENABLE_OP_EN(1));
+ }
+ 
+ void
+-- 
+2.53.0
+
+
+From e38c2fa8d3b67baae2575de7cd7a7458b6c78046 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 21:21:08 +0300
+Subject: [PATCH 02/20] =?UTF-8?q?TEST:=20RKT=5FVENDOR=5FOVR=20env=20?=
+ =?UTF-8?q?=E2=80=94=20vendor-exact=20values=20for=20reference=20conv2d=20?=
+ =?UTF-8?q?(RE=20session=202026-08-20)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 3c8f1a96bb5..fbb4d3098dc 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -19,10 +19,33 @@ emit_raw(struct util_dynarray *regs, uint32_t target, uint32_t reg,
+    util_dynarray_append(regs, packed_value);
+ }
+ 
++/* TEST (iav/droid RE session): optional overrides with the vendor-exact
++ * values for THE reference conv2d (80x80x16 -> 40x40x128, 5x5 s2) from the
++ * MR !42134 byte-exact diff table.  Enabled with RKT_VENDOR_OVR=1.
++ */
++#include <stdlib.h>
++static const struct { uint32_t reg; uint32_t val; } rkt_test_ovr[] = {
++   { 0x1010, 0x00000070 },  /* CNA_CONV_CON2 */
++   { 0x1018, 0x00000000 },  /* CNA_CONV_CON4 */
++   { 0x1044, 0x00500028 },  /* CNA_CBUF_CON1 */
++   { 0x1078, 0x00171c07 },  /* CNA_DMA_CON0 */
++   { 0x107c, 0x00000050 },  /* CNA_DMA_CON1 line_stride */
++   { 0x1080, 0x00001900 },  /* CNA_DMA_CON2 surf_stride */
++   { 0x40c0, 0x00006400 },  /* DPU (per MR table) */
++};
++
+ static void
+ emit(struct util_dynarray *regs, uint32_t reg, uint32_t value)
+ {
+    uint32_t target = rkt_get_target(reg) + 0x1;
++   if (getenv("RKT_VENDOR_OVR")) {
++      for (unsigned i = 0; i < ARRAY_SIZE(rkt_test_ovr); i++) {
++         if (rkt_test_ovr[i].reg == reg) {
++            value = rkt_test_ovr[i].val;
++            break;
++         }
++      }
++   }
+    emit_raw(regs, target, reg, value);
+ }
+ 
+-- 
+2.53.0
+
+
+From 43b6638148dcbc8e3db98079835867021032aad1 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 00:54:01 +0300
+Subject: [PATCH 03/20] rocket: DPU_SURFACE_ADD = Wout*Hout cells (drop RK3588
+ magic *2)
+
+Vendor librknnrt 1.5.2 computes DPU SURFACE_ADD (0x40c0) as the output
+surface size in 16-byte cells, Wout*Hout (= output_surface_stride).
+Mesa used Wout*Hout*2. For the reference conv2d 80x80x16->40x40x128 5x5 s2
+this yields 0x6400 (vendor-exact) instead of 0xc800.
+---
+ src/gallium/drivers/rocket/rkt_task.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 5a910a97442..ffbade8eea3 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -145,7 +145,11 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+    else
+       task->weights_kernels = align(operation->output_channels, 2);
+ 
+-   task->surfaces_per_row = task->output_width * task->output_height * 2;
++   /* RK3568 (vendor librknnrt 1.5.2, RE 2026-08-20): DPU SURFACE_ADD is the
++    * output surface size in 16-byte cells = Wout * Hout, i.e. equal to
++    * output_surface_stride.  The previous *2 was an RK3588-era magic
++    * multiplier (elements-vs-cells mismatch). */
++   task->surfaces_per_row = task->output_width * task->output_height;
+    if (operation->depthwise)
+       task->surfaces_per_row *= 2;
+ }
+-- 
+2.53.0
+
+
+From 2ce088e21d6ea728a7fa19dadc63b252c46ca618 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 00:55:00 +0300
+Subject: [PATCH 04/20] rocket: CNA DMA line/surf stride in 16-byte cells
+ (vendor formulas)
+
+Vendor librknnrt 1.5.2: CNA_DMA_CON1 line_stride = Win and CNA_DMA_CON2
+surf_stride = Win*Hin, both in FEATURE_ATOMIC_SIZE (16-byte) cells.
+Mesa divided line_stride by 4 and used line*(Hin/4 - 1) for surf_stride.
+Reference conv2d: 0x50/0x1900 (vendor-exact) instead of 0x140/0x17c0.
+---
+ src/gallium/drivers/rocket/rkt_task.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index ffbade8eea3..04dc7739e83 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -110,9 +110,13 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+          task->input_surface_stride =
+             (float)task->input_line_stride * (((float)task->input_height) - 1);
+    } else {
+-      task->input_line_stride = calc_line_stride(operation->input_width) / 4;
++      /* RK3568 (vendor librknnrt 1.5.2, RE 2026-08-20): both CNA DMA strides
++       * are in 16-byte cells: line_stride = Win, surf_stride = Win * Hin.
++       * The old /4 and (Hin/4 - 1) were RK3588-era magic. */
++      task->input_line_stride =
++         calc_line_stride(operation->input_width) / FEATURE_ATOMIC_SIZE;
+       task->input_surface_stride =
+-         (float)task->input_line_stride * (((float)task->input_height / 4) - 1);
++         task->input_line_stride * task->input_height;
+    }
+ 
+    if (task->input_width == 8 &&
+-- 
+2.53.0
+
+
+From 59a9aae9e5d4e2b76294c51c516191010ff8d014 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 00:55:00 +0300
+Subject: [PATCH 05/20] TEST: shrink RKT_VENDOR_OVR to the 4 regs without
+ derived formulas
+
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index fbb4d3098dc..3464087227c 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -29,9 +29,8 @@ static const struct { uint32_t reg; uint32_t val; } rkt_test_ovr[] = {
+    { 0x1018, 0x00000000 },  /* CNA_CONV_CON4 */
+    { 0x1044, 0x00500028 },  /* CNA_CBUF_CON1 */
+    { 0x1078, 0x00171c07 },  /* CNA_DMA_CON0 */
+-   { 0x107c, 0x00000050 },  /* CNA_DMA_CON1 line_stride */
+-   { 0x1080, 0x00001900 },  /* CNA_DMA_CON2 surf_stride */
+-   { 0x40c0, 0x00006400 },  /* DPU (per MR table) */
++   /* 0x107c, 0x1080, 0x40c0 removed: now produced by proper formulas in
++    * rkt_task.c (line_stride=Win, surf_stride=Win*Hin, surf_add=Wout*Hout). */
+ };
+ 
+ static void
+-- 
+2.53.0
+
+
+From eddef36fff12fe52fa103ded8c9b0f262cf033a1 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 00:58:38 +0300
+Subject: [PATCH 06/20] TEST: emit CMAC OPERATION_ENABLE (0x2008) alongside the
+ other sub-units
+
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 3464087227c..e553dd56e38 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -606,6 +606,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * RK3588-specific and not supported on RK3568. Direct writes work on both. */
+    emit_raw(regs, CNA | 0x1, REG_CNA_OPERATION_ENABLE,
+             CNA_OPERATION_ENABLE_OP_EN(1));
++   /* TEST (RE 2026-08-21): CMAC (0x2000 block, routing target 0x4) got its
++    * S_POINTER wake but never an OPERATION_ENABLE — mesa enables only 4 of
++    * the 5 woken sub-units.  Assume the block mirrors the common layout
++    * (0x2008 = OPERATION_ENABLE) and enable it too. */
++   emit_raw(regs, 0x401, 0x2008, 0x1);
+    emit_raw(regs, CORE | 0x1, REG_CORE_OPERATION_ENABLE,
+             CORE_OPERATION_ENABLE_OP_EN(1));
+    emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_OPERATION_ENABLE,
+-- 
+2.53.0
+
+
+From e08643780b9b17b45a49de1ddf5fe478707ce94b Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:01:24 +0300
+Subject: [PATCH 07/20] Revert "TEST: emit CMAC OPERATION_ENABLE (0x2008)
+ alongside the other sub-units"
+
+This reverts commit eddef36fff12fe52fa103ded8c9b0f262cf033a1.
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index e553dd56e38..3464087227c 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -606,11 +606,6 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * RK3588-specific and not supported on RK3568. Direct writes work on both. */
+    emit_raw(regs, CNA | 0x1, REG_CNA_OPERATION_ENABLE,
+             CNA_OPERATION_ENABLE_OP_EN(1));
+-   /* TEST (RE 2026-08-21): CMAC (0x2000 block, routing target 0x4) got its
+-    * S_POINTER wake but never an OPERATION_ENABLE — mesa enables only 4 of
+-    * the 5 woken sub-units.  Assume the block mirrors the common layout
+-    * (0x2008 = OPERATION_ENABLE) and enable it too. */
+-   emit_raw(regs, 0x401, 0x2008, 0x1);
+    emit_raw(regs, CORE | 0x1, REG_CORE_OPERATION_ENABLE,
+             CORE_OPERATION_ENABLE_OP_EN(1));
+    emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_OPERATION_ENABLE,
+-- 
+2.53.0
+
+
+From caa894f59fe5af292bda26e18289e37056b35c90 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:01:25 +0300
+Subject: [PATCH 08/20] TEST: DPU_RDMA burst_len 7 (vendor CNA burst) instead
+ of 15
+
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 3464087227c..21d8493f7c2 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -555,7 +555,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_COMB_USE(5);
+    } else {
+-      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
++      /* TEST (RE 2026-08-21): vendor CNA DMA_CON0 uses burst_len 7 on
++       * RK3568 (mesa 15 left CNA DMA incomplete, Test 13); try the same
++       * burst limit for DPU_RDMA — bias BRDMA never fetches (DT_RD delta
++       * vs vendor = exactly the 512-byte bias buffer). */
++      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(7) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
+    }
+ 
+-- 
+2.53.0
+
+
+From 734fe69e2482994fa491550244b02ac1a76ec0d7 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:17:37 +0300
+Subject: [PATCH 09/20] Revert "TEST: DPU_RDMA burst_len 7 (vendor CNA burst)
+ instead of 15"
+
+This reverts commit caa894f59fe5af292bda26e18289e37056b35c90.
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 21d8493f7c2..3464087227c 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -555,11 +555,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_COMB_USE(5);
+    } else {
+-      /* TEST (RE 2026-08-21): vendor CNA DMA_CON0 uses burst_len 7 on
+-       * RK3568 (mesa 15 left CNA DMA incomplete, Test 13); try the same
+-       * burst limit for DPU_RDMA — bias BRDMA never fetches (DT_RD delta
+-       * vs vendor = exactly the 512-byte bias buffer). */
+-      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(7) |
++      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
+    }
+ 
+-- 
+2.53.0
+
+
+From 32c076625a212fcb7b9c2c6f43de1925844f5acd Mon Sep 17 00:00:00 2001
+From: iav <iav@iav.lv>
+Date: Fri, 21 Aug 2026 20:19:36 +0300
+Subject: [PATCH 10/20] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
+ and DPU_RDMA 0x5024
+
+The vendor command stream extracted from any .rknn shows three things mesa
+got wrong on RK3568:
+
+- The CORE block map in registers.xml is one slot too high: it has a
+  spurious MAC_GATING at 0x300c, so MISC_CFG/DATAOUT_SIZE_0/DATAOUT_SIZE_1
+  all shifted up by four bytes.  Mesa was writing QD_EN into what the
+  hardware reads as DATAOUT_SIZE_0, telling CORE its output was three
+  pixels wide and one high.
+- CMAC MISC_CFG at 0x200c was never written (QD_EN, plus DW_EN for
+  depthwise).
+- DPU_RDMA 0x5024 is absent from registers.xml and never written; the
+  vendor puts output_channels - 1 there in every task, and without it the
+  bias RDMA fetches nothing.
+
+With these the pipeline completes for the first time on RK3568: the DPU
+interrupt arrives, DT_WR is non-zero and the job no longer times out.
+Numerical output is still wrong -- the DPU mode registers (DATA_FORMAT,
+BS/BN configs, RDMA burst config) remain to be matched.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 42 +++++++++++++++++++------
+ 1 file changed, 33 insertions(+), 9 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 3464087227c..4bd968d5d37 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -17,6 +17,11 @@ emit_raw(struct util_dynarray *regs, uint32_t target, uint32_t reg,
+    packed_value |= (uint64_t)reg;
+ 
+    util_dynarray_append(regs, packed_value);
++
++   /* TEST (iav RE, 2026-08-21): RKT_DUMP=1 prints the emitted command stream so
++    * it can be diffed against the vendor stream extracted from a .rknn. */
++   if (getenv("RKT_DUMP"))
++      fprintf(stderr, "rkt regcmd %016llx\n", (unsigned long long)packed_value);
+ }
+ 
+ /* TEST (iav/droid RE session): optional overrides with the vendor-exact
+@@ -24,6 +29,7 @@ emit_raw(struct util_dynarray *regs, uint32_t target, uint32_t reg,
+  * MR !42134 byte-exact diff table.  Enabled with RKT_VENDOR_OVR=1.
+  */
+ #include <stdlib.h>
++#include <stdio.h>
+ static const struct { uint32_t reg; uint32_t val; } rkt_test_ovr[] = {
+    { 0x1010, 0x00000070 },  /* CNA_CONV_CON2 */
+    { 0x1018, 0x00000000 },  /* CNA_CONV_CON4 */
+@@ -263,15 +269,26 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    if (operation->depthwise)
+       misc_cfg |= CORE_MISC_CFG_DW_EN(1);
+ 
+-   EMIT(REG_CORE_MISC_CFG, misc_cfg);
+-   EMIT(REG_CORE_DATAOUT_SIZE_0,
+-        CORE_DATAOUT_SIZE_0_DATAOUT_HEIGHT(task->output_height - 1) |
+-           CORE_DATAOUT_SIZE_0_DATAOUT_WIDTH(task->output_width - 1));
+-   EMIT(REG_CORE_DATAOUT_SIZE_1,
+-        CORE_DATAOUT_SIZE_1_DATAOUT_CHANNEL(15));
+-   EMIT(REG_CORE_CLIP_TRUNCATE,
+-        CORE_CLIP_TRUNCATE_CLIP_TRUNCATE(operation->truncate_bits));
+-   emit_raw(regs, CORE | 0x1, 0x3030, 0);
++   /* TEST (iav RE, 2026-08-21): on RK3568 the CORE block map is one slot lower
++    * than registers.xml claims -- the xml has a spurious MAC_GATING at 0x300c
++    * which shifts everything after it.  The vendor command stream (all 44
++    * convolution tasks of mobilenet_v1) writes:
++    *   0x300c = MISC_CFG      (0, or DW_EN=2 for depthwise; QD_EN never set)
++    *   0x3010 = DATAOUT_SIZE_0 ((height-1) << 16 | (width-1))
++    *   0x3014 = DATAOUT_SIZE_1 (channels - 1)
++    *   0x302c = 0             (what the xml calls 0x3030)
++    * CLIP_TRUNCATE (real 0x3018) is not written at all.
++    * With the xml offsets mesa told CORE its output was 3 wide and 1 high,
++    * so CORE produced nothing and the DPU interrupt never arrived. */
++   /* TEST (iav RE, 2026-08-21): CMAC MISC_CFG sits at 0x200c, the same slot
++    * within its block as CORE's at 0x300c.  The vendor sets QD_EN there for
++    * every task and adds DW_EN for depthwise; mesa never wrote it at all. */
++   emit_raw(regs, 0x401, 0x200c, operation->depthwise ? 0x3 : 0x1);
++   emit_raw(regs, CORE | 0x1, 0x300c, operation->depthwise ? 0x2 : 0x0);
++   emit_raw(regs, CORE | 0x1, 0x3010,
++            ((task->output_height - 1) << 16) | (task->output_width - 1));
++   emit_raw(regs, CORE | 0x1, 0x3014, task->output_channels - 1);
++   emit_raw(regs, CORE | 0x1, 0x302c, 0);
+ 
+    /* DPU_FEATURE_MODE_CFG per RK3568 TRM page 433:
+     * - BURST_LEN: 0=burst4, 1=burst8, 2=burst16.
+@@ -526,6 +543,13 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(1));
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+         rkt_resource(operation->biases)->phys_addr);
++   /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
++    * and is absent from registers.xml, so mesa never writes it.  The vendor
++    * stream in every .rknn writes output_channels - 1 there for all 51 tasks
++    * of mobilenet_v1 (10 distinct values, all matching).  Without it the bias
++    * RDMA has nothing to fetch, which matches our DT_RD being exactly 512
++    * bytes (one bias buffer) short of the vendor's. */
++   emit_raw(regs, DPU_RDMA | 0x1, 0x5024, task->output_channels - 1);
+    EMIT(REG_DPU_RDMA_RDMA_NRDMA_CFG, 0);
+    EMIT(REG_DPU_RDMA_RDMA_BN_BASE_ADDR, 0);
+ 
+-- 
+2.53.0
+
+
+From c8de00a953ad084096b65968842d6d52f045def1 Mon Sep 17 00:00:00 2001
+From: iav <iav@iav.lv>
+Date: Fri, 21 Aug 2026 20:25:30 +0300
+Subject: [PATCH 11/20] rocket/rk3568: replace the vendor-override hack with
+ the real formulas
+
+All of these were read off the vendor command stream embedded in .rknn
+model files, across 44 convolution tasks of mobilenet_v1 and 23 of
+resnet18:
+
+- CNA_DMA_CON0 is the constant 0x00171c07 on every geometry: both burst
+  lengths are 7 and FETCH_PIXEL_LEN is 28, not input_width.
+- CNA_CONV_CON2 FEATURE_GRAINS is weights_height + stride_y, one less than
+  mesa emitted.  (The vendor raises it further when it schedules more than
+  two output lines per CBUF pass, which mesa never does.)
+- CNA_CBUF_CON1 carries the input width in its upper half.
+- CNA_CONV_CON4 RGB_BYTELENGTH is written only in ARGB mode.
+- CNA_CVT_CON0 keeps CVT_BYPASS clear on non-ARGB layers.
+- DPU_DST_SURF_STRIDE is output_width * output_height / 2.
+
+With these the reference 80x80x16 -> 40x40x128 conv completes without any
+override, in 4.6 ms instead of a 500 ms timeout.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 37 ++++++++++++++++++-------
+ 1 file changed, 27 insertions(+), 10 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 4bd968d5d37..526531651fc 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -124,7 +124,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_CNA_CONV_CON2,
+         CNA_CONV_CON2_KERNEL_GROUP(task->weights_kernels / 32 - 1) |
+         CNA_CONV_CON2_FEATURE_GRAINS(
+-           task->stride_y + task->weights_height + 1));
++           task->stride_y + task->weights_height));
+    EMIT(REG_CNA_CONV_CON3, CNA_CONV_CON3_CONV_X_STRIDE(task->stride_x) |
+                               CNA_CONV_CON3_CONV_Y_STRIDE(task->stride_y));
+    /* CONV_CON4: RGB_BYTELENGTH per TRM (page 418). Required to be non-zero
+@@ -134,9 +134,13 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * register MUST be non-zero or CNA's OP_ENABLE entry is rejected.
+     * Use input_width * input_height * input_channels as a safe per-task
+     * input byte count. */
++   /* TEST (iav RE, 2026-08-21): the vendor writes RGB_BYTELENGTH only for the
++    * ARGB first layer and leaves this at zero everywhere else. */
+    EMIT(REG_CNA_CONV_CON4,
+-        CNA_CONV_CON4_RGB_BYTELENGTH(
+-           task->input_width * task->input_height * task->input_channels));
++        con1 ? CNA_CONV_CON4_RGB_BYTELENGTH(task->input_width *
++                                            task->input_height *
++                                            task->input_channels)
++             : 0);
+    EMIT(REG_CNA_DATA_SIZE0,
+         CNA_DATA_SIZE0_DATAIN_WIDTH(task->input_width) |
+            CNA_DATA_SIZE0_DATAIN_HEIGHT(task->input_height));
+@@ -158,7 +162,10 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_CNA_CBUF_CON0, con0);
+ 
+-   EMIT(REG_CNA_CBUF_CON1, CNA_CBUF_CON1_DATA_ENTRIES(task->input_data_entries));
++   /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
++    * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
++   emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
++            (task->input_width << 16) | task->input_data_entries);
+ 
+    if (task->input_channels_real == 1) {
+       unsigned truncate = 14;
+@@ -183,9 +190,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       EMIT(REG_CNA_CVT_CON4,
+            CNA_CVT_CON4_CVT_SCALE3(scale) | CNA_CVT_CON4_CVT_OFFSET3(offset));
+    } else {
++      /* TEST (iav RE, 2026-08-21): the vendor writes 0xa here for all 42
++       * non-ARGB tasks of mobilenet_v1 -- DATA_SIGN and CVT_TYPE set, but
++       * CVT_BYPASS clear.  The converter stays in the path. */
+       EMIT(REG_CNA_CVT_CON0, CNA_CVT_CON0_DATA_SIGN(1) |
+-                                CNA_CVT_CON0_CVT_TYPE(1) |
+-                                CNA_CVT_CON0_CVT_BYPASS(1));
++                                CNA_CVT_CON0_CVT_TYPE(1));
+       EMIT(REG_CNA_CVT_CON1, CNA_CVT_CON1_CVT_SCALE0(1));
+       EMIT(REG_CNA_CVT_CON2, CNA_CVT_CON2_CVT_SCALE1(1));
+       EMIT(REG_CNA_CVT_CON3, CNA_CVT_CON3_CVT_SCALE2(1));
+@@ -204,10 +213,14 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * length. Mesa previously omitted this field, leaving it 0 which causes
+     * CNA to fetch zero feature data per surface on RK3568. Set to input
+     * width as a safe default — matches per-row fetch count. */
++   /* TEST (iav RE, 2026-08-21): the vendor writes the same 0x00171c07 here in
++    * all 44 convolution tasks of mobilenet_v1 and all 23 of resnet18, across
++    * every geometry -- FETCH_PIXEL_LEN is a constant 28, not input_width, and
++    * both burst lengths are 7, not 15. */
+    EMIT(REG_CNA_DMA_CON0,
+-        CNA_DMA_CON0_WEIGHT_BURST_LEN(15) |
+-        CNA_DMA_CON0_FETCH_PIXEL_LEN(task->input_width) |
+-        CNA_DMA_CON0_DATA_BURST_LEN(15));
++        CNA_DMA_CON0_WEIGHT_BURST_LEN(7) |
++        CNA_DMA_CON0_FETCH_PIXEL_LEN(28) |
++        CNA_DMA_CON0_DATA_BURST_LEN(7));
+    EMIT(REG_CNA_DMA_CON1, CNA_DMA_CON1_LINE_STRIDE(task->input_line_stride));
+    EMIT(REG_CNA_DMA_CON2, CNA_DMA_CON2_SURF_STRIDE(task->input_surface_stride));
+ 
+@@ -308,8 +321,12 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_DST_BASE_ADDR,
+         rkt_get_tensor(subgraph, operation->output_index)->phys_addr +
+            task->output_offset);
++   /* TEST (iav RE, 2026-08-21): the vendor stream carries output_width *
++    * output_height / 2 here, half of what mesa emits, on all 44 convolution
++    * tasks of mobilenet_v1 (checked against the full output tensor, not the
++    * per-task band).  DPU_SURFACE_ADD at 0x40c0 keeps the undivided value. */
+    EMIT(REG_DPU_DST_SURF_STRIDE,
+-        DPU_DST_SURF_STRIDE_DST_SURF_STRIDE(task->output_surface_stride));
++        DPU_DST_SURF_STRIDE_DST_SURF_STRIDE(task->output_surface_stride / 2));
+    EMIT(REG_DPU_DATA_CUBE_WIDTH,
+         DPU_DATA_CUBE_WIDTH_WIDTH(task->output_width - 1));
+    EMIT(REG_DPU_DATA_CUBE_HEIGHT,
+-- 
+2.53.0
+
+
+From fa837898fd37270a5d680b1391d78abaf0f859e8 Mon Sep 17 00:00:00 2001
+From: iav <iav@iav.lv>
+Date: Fri, 21 Aug 2026 23:06:30 +0300
+Subject: [PATCH 12/20] rocket/rk3568: fix depthwise, pad value and
+ KERNEL_GROUP
+
+Three more differences read off the vendor command stream:
+
+- rkt_task.c doubled output_channels for depthwise layers with 32 or fewer
+  channels and aligned the result to 64.  RK3568 wants the real count: the
+  vendor writes DPU_DATA_CUBE_CHANNEL 0x001f001f for every 32-channel
+  depthwise layer of mobilenet_v1, where mesa announced 64 channels to the
+  DPU, which then waited for data that never arrived and stalled right after
+  CNA.  Depthwise layers now complete.
+- The pad value lives in the upper half of CNA_PAD_CON0, not in the separate
+  PAD_CON1 register registers.xml lists -- the vendor never writes 0x1184 at
+  all.  Mesa already computed the right number (input_zero_point - 0x80) and
+  put it in the wrong place, so every padded convolution padded with zero
+  instead of with the zero point.
+- CNA_CONV_CON2 KERNEL_GROUP stays zero in all 51 vendor tasks, including
+  layers with 512 and 1001 kernels; mesa's kernels/32 - 1 underflowed to 0xff
+  on depthwise.
+- CNA_CBUF_CON1 DATA_ENTRIES is twice what mesa computed.
+
+Single-layer tests at mobilenet_v1 shapes -- depthwise 3x3 stride 1 and
+stride 2 at 112x112x32, plain 3x3 at 56x56x32, and the 80x80x16 to
+40x40x128 reference -- now all run without a timeout.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 23 ++++++++++++++++++-----
+ src/gallium/drivers/rocket/rkt_task.c   |  7 ++++++-
+ 2 files changed, 24 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 526531651fc..705063f0d5f 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -121,8 +121,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * for int8 mode (32 kernels per group). FEATURE_GRAINS per TRM formula
+     * = y_stride + weight_height + 1 (suggested by TRM). The old "+50" value
+     * was a hack — TRM-correct formula tested 2026-05-21. */
++   /* TEST (iav RE, 2026-08-21): the vendor leaves KERNEL_GROUP at zero in all
++    * 51 tasks of mobilenet_v1, including layers with 512 and 1001 kernels.
++    * Mesa's kernels/32 - 1 underflows to 0xff on depthwise, where kernels is
++    * 1 -- and depthwise is exactly what stalls after CNA. */
+    EMIT(REG_CNA_CONV_CON2,
+-        CNA_CONV_CON2_KERNEL_GROUP(task->weights_kernels / 32 - 1) |
+         CNA_CONV_CON2_FEATURE_GRAINS(
+            task->stride_y + task->weights_height));
+    EMIT(REG_CNA_CONV_CON3, CNA_CONV_CON3_CONV_X_STRIDE(task->stride_x) |
+@@ -165,7 +168,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
+     * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
+    emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
+-            (task->input_width << 16) | task->input_data_entries);
++            (task->input_width << 16) | (task->input_data_entries * 2));
+ 
+    if (task->input_channels_real == 1) {
+       unsigned truncate = 14;
+@@ -203,8 +206,17 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_CNA_FC_CON0, 0);
+    EMIT(REG_CNA_FC_CON1, 0);
+-   EMIT(REG_CNA_PAD_CON0, CNA_PAD_CON0_PAD_LEFT(task->pad_left) |
+-                             CNA_PAD_CON0_PAD_TOP(task->pad_top));
++   /* TEST (iav RE, 2026-08-21): on RK3568 the pad value lives in the upper half
++    * of PAD_CON0, not in the separate PAD_CON1 register registers.xml lists --
++    * the vendor never writes 0x1184 at all.  Its PAD_CON0 is 0xff800000 /
++    * 0xff800011 for every layer whose input zero point is 0 (that is -128 once
++    * the uint8 tensor is read as int8) and 0x00000000 for the network input,
++    * whose zero point is 128.  So the value is input_zero_point - 0x80, which
++    * is exactly what mesa already computed for PAD_CON1. */
++   EMIT(REG_CNA_PAD_CON0,
++        ((uint32_t)((task->input_zero_point - 0x80) & 0xffff) << 16) |
++           CNA_PAD_CON0_PAD_LEFT(task->pad_left) |
++           CNA_PAD_CON0_PAD_TOP(task->pad_top));
+    EMIT(REG_CNA_FEATURE_DATA_ADDR,
+         rkt_get_tensor(subgraph, operation->input_index)->phys_addr +
+            task->input_offset);
+@@ -276,7 +288,8 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    if (operation->depthwise && task->input_zero_point == 0x8b)
+       pad_con1 = 0x0b0b;
+ 
+-   EMIT(REG_CNA_PAD_CON1, pad_con1);
++   /* The vendor writes no PAD_CON1; the pad value went into PAD_CON0 above. */
++   (void)pad_con1;
+ 
+    uint32_t misc_cfg = CORE_MISC_CFG_QD_EN(1);
+    if (operation->depthwise)
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 04dc7739e83..4f37b0f6458 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -85,7 +85,12 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+ 
+    task->output_channels_real = operation->output_channels;
+    task->output_channels = align(MAX2(operation->output_channels, 32), 32);
+-   if (operation->depthwise) {
++   /* TEST (iav RE, 2026-08-21): RK3568 wants the real channel count on
++    * depthwise.  The vendor stream carries 32 channels for every 32-channel
++    * depthwise layer of mobilenet_v1 (DPU_DATA_CUBE_CHANNEL 0x001f001f),
++    * while this doubling made mesa announce 64 to the DPU, which then waited
++    * for data that never arrived and stalled right after CNA. */
++   if (operation->depthwise && false) {
+       if (task->output_channels_real <= 32)
+          task->output_channels *= 2;
+       task->output_channels = align(task->output_channels, 64);
+-- 
+2.53.0
+
+
+From f7cdb594eb541ebfab67f52f6b8d9c3589f8297e Mon Sep 17 00:00:00 2001
+From: iav <iav@iav.lv>
+Date: Fri, 21 Aug 2026 23:54:53 +0300
+Subject: [PATCH 13/20] rocket/rk3568: drop the extra weights CBUF bank
+
+calc_weights_banks() added one bank on top of its own estimate, with a
+comment saying the calculation might be wrong on this hardware.  On RK3568
+it is not: with the extra bank mesa hands the convolution buffer two banks
+for weights and six for data, while the vendor gives one and seven.
+
+Without it mesa now emits CBUF_CON0 0x17 and CBUF_CON1 0x00e00038 for the
+224-wide first layer of mobilenet_v1 -- byte for byte what the vendor
+stream carries for that layer.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 2 +-
+ src/gallium/drivers/rocket/rkt_task.c   | 6 ++++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 705063f0d5f..68d95d39878 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -168,7 +168,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
+     * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
+    emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
+-            (task->input_width << 16) | (task->input_data_entries * 2));
++            (task->input_width << 16) | task->input_data_entries);
+ 
+    if (task->input_channels_real == 1) {
+       unsigned truncate = 14;
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 4f37b0f6458..34277967c19 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -47,8 +47,10 @@ calc_weights_banks(struct rkt_operation *operation)
+    entries = DIV_ROUND_UP(bytes, CBUF_ENTRY_SIZE);
+    banks = DIV_ROUND_UP(entries, CBUF_ENTRIES_PER_BANK);
+ 
+-   /* Why do we need an extra bank? The calc above might be wrong on this HW */
+-   banks++;
++   /* TEST (iav RE, 2026-08-21): the vendor gives this layer one weight bank and
++    * seven data banks (CBUF_CON0 0x17); with the extra bank mesa keeps two and
++    * six, and the 224-wide RGB layer then stalls on its second band. */
++   /* banks++; */
+ 
+    return banks;
+ }
+-- 
+2.53.0
+
+
+From 5c1bfd4fa9e6792eb16280a196132ba8411d0754 Mon Sep 17 00:00:00 2001
+From: iav <iav@iav.lv>
+Date: Sat, 22 Aug 2026 00:21:58 +0300
+Subject: [PATCH 14/20] rocket/rk3568: CBUF banks are 64 KiB, and bands must
+ not overshoot
+
+Two sizing errors that made mesa split layers it did not need to split.
+
+CBUF_BANK_SIZE was 32768.  The vendor command stream says otherwise: the
+first convolution of mobilenet_v1 is 224 wide with seven data banks, and
+the vendor splits it into bands of 127 and 98 input rows.  At 14 entries
+per row that first band needs 128 slices, which only fits if a bank holds
+256 entries of 256 bytes -- 64 KiB.  With half the real capacity mesa cut
+the same layer into five bands, and cut layers that need no splitting at
+all into two or three.
+
+The band loop also handed each task every available CBUF slice, which
+leaves a spare input row whenever the slice count is not congruent to the
+kernel height modulo the stride: mesa fed CNA 128 rows where 63 output
+rows consume (63 - 1) * 2 + 3 = 127.  The vendor carries exactly 127.
+
+Single-layer tests at mobilenet_v1 shapes -- 1x1 at 112x112x32 to 64,
+3x3 stride 2 at 112x112x32, depthwise 3x3 stride 1 and 2, plain 3x3 at
+56x56x32, and the 80x80x16 to 40x40x128 reference -- now fit in one task
+each and all complete.  Three of them needed two or three bands before
+and timed out.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_ml.h   |  8 +++++++-
+ src/gallium/drivers/rocket/rkt_task.c | 16 ++++++++++++++++
+ 2 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index 9d00da4928c..7dfbd26b327 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -11,7 +11,13 @@
+ #include "rkt_device.h"
+ 
+ // http://nvdla.org/hw/v1/ias/unit_description.html#convolution-buffer
+-#define CBUF_BANK_SIZE        32768
++/* TEST (iav RE, 2026-08-22): RK3568 banks are 64 KiB, not 32.  Derived from
++ * the vendor command stream: the first convolution of mobilenet_v1 (224 wide,
++ * 7 data banks) is split into bands of 127 and 98 input rows.  At 14 entries
++ * per row that first band needs 128 slices, which only fits if a bank holds
++ * 256 entries of 256 bytes.  With 32768 mesa computed half the capacity and
++ * split the same layer into five bands instead of two. */
++#define CBUF_BANK_SIZE        65536
+ /* CBUF_BANKS is SoC-specific:
+  *   RK3588: 12 banks (384 KiB CBUF)
+  *   RK3568:  8 banks (256 KiB CBUF) — per RK3568 TRM Part2 section 9.1
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 34277967c19..c1936c4583c 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -329,6 +329,22 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+          1;
+       cur_task->atomic_count = cur_task->output_width * cur_task->output_height;
+ 
++      /* TEST (iav RE, 2026-08-22): trim the band to the rows the convolution
++       * actually consumes.  Taking every available CBUF slice leaves a spare
++       * input row whenever the slice count is not congruent to the kernel
++       * height modulo the stride -- for the 224-wide first layer of
++       * mobilenet_v1 mesa fed CNA 128 rows where 63 output rows need
++       * (63 - 1) * 2 + 3 = 127.  The vendor stream carries exactly 127. */
++      {
++         unsigned consumed = (cur_task->output_height - 1) * operation->stride +
++                             operation->weights_height;
++         unsigned pad = cur_task->pad_top + cur_task->pad_bottom;
++
++         consumed = consumed > pad ? consumed - pad : 0;
++         if (consumed > 0 && cur_task->input_height > consumed)
++            cur_task->input_height = consumed;
++      }
++
+       cur_task->input_offset =
+          calc_line_stride(operation->input_width) * cur_task->top_slice;
+       cur_task->output_offset =
+-- 
+2.53.0
+
+
+From 1a26bf32109d1ab421c6db9a3f4e903e1f96b913 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 14:09:32 +0300
+Subject: [PATCH 15/20] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
+ load-bearing on RK3568
+
+The vendor stream carries 0x00171c07 in every convolution task of
+mobilenet_v1 and resnet18.  Mesa assembled the register from named
+fields, which drops bit 20 (RESERVED in the XML) and yields 0x00071c07.
+Without that bit the MAC array of RK3568 computes garbage: the output
+of every regular convolution is a constant independent of the input.
+With it, a 1x1 identity convolution produces input-dependent output
+for the first job of a context.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 68d95d39878..38e994e3b32 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -229,10 +229,12 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * all 44 convolution tasks of mobilenet_v1 and all 23 of resnet18, across
+     * every geometry -- FETCH_PIXEL_LEN is a constant 28, not input_width, and
+     * both burst lengths are 7, not 15. */
+-   EMIT(REG_CNA_DMA_CON0,
+-        CNA_DMA_CON0_WEIGHT_BURST_LEN(7) |
+-        CNA_DMA_CON0_FETCH_PIXEL_LEN(28) |
+-        CNA_DMA_CON0_DATA_BURST_LEN(7));
++   /* RK3568 (vendor librknnrt 1.5.2, RE 2026-08-22): write the vendor value
++    * verbatim.  Bit 20 is RESERVED in the XML, so assembling this register
++    * from named fields silently drops it (0x071c07 instead of 0x171c07),
++    * and without bit 20 the MAC array never sees real data: the output of
++    * every regular convolution is an input-independent constant. */
++   EMIT(REG_CNA_DMA_CON0, 0x00171c07);
+    EMIT(REG_CNA_DMA_CON1, CNA_DMA_CON1_LINE_STRIDE(task->input_line_stride));
+    EMIT(REG_CNA_DMA_CON2, CNA_DMA_CON2_SURF_STRIDE(task->input_surface_stride));
+ 
+-- 
+2.53.0
+
+
+From 10bf133bb51f8494c331f472926116809da76f64 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 16:47:30 +0300
+Subject: [PATCH 16/20] rocket: RK3568 vendor per-channel requant + atomic
+ broadcast unit start
+
+The DPU BS stage now takes all three per-channel operands from the BRDMA
+stream (8 bytes per channel, packed [bias i32 x4][ow i16 x4][mul u16 x4]),
+matching the vendor stack: BS_CFG 0x148, BS_MUL_CFG 0xe01 (shift 14),
+DATA_FORMAT 0xe0, OW_SRC in BS_OW_CFG, BRDMA_DATA_USE 7.  The ow operand
+is 0x80 - weight_zero_point: the hardware adds ow * sum(x) to the
+accumulator.  The layer-level scale stays in OUT_CVT as before.
+
+The five processing units must be started atomically with the broadcast
+write (target 0x81, reg 8, value 0x1f) like the vendor stream does on
+every task; starting them one at a time desynchronizes the pipeline and
+scrambles the BRDMA operand lanes (verified by replaying a captured
+vendor task through this driver: sequential OP_EN corrupts 41% of the
+output bytes, the broadcast start is byte-exact).
+
+layer-identity now matches the CPU reference exactly on all fills,
+reproducibly across processes.  Env-gated RE probes (RKT_PROBE, RKT_WPOKE,
+RKT_WLAY, RKT_BSCFG, RKT_DF0) are left in for the ongoing weight-layout
+investigation of regular NxN convolutions.
+---
+ src/gallium/drivers/rocket/rkt_coefs.c  | 173 +++++++++++++++---------
+ src/gallium/drivers/rocket/rkt_regcmd.c |  47 ++++---
+ 2 files changed, 137 insertions(+), 83 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index 1e9a10623bf..106f442ef60 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -5,6 +5,8 @@
+ 
+ #include "util/u_inlines.h"
+ 
++#include <stdlib.h>
++#include <string.h>
+ #include "rkt_coefs.h"
+ #include "rkt_ml.h"
+ 
+@@ -29,6 +31,9 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+ 
+    input_channels = MAX2(input_channels, FEATURE_ATOMIC_SIZE);
+ 
++   /* TEST (iav RE 2026-08-22): RK3568 half-width weight atomic experiment */
++   unsigned watom = getenv("RKT_WK") ? atoi(getenv("RKT_WK")) : WEIGHT_ATOMIC_SIZE;
++
+    output_channels = align(output_channels, 2);
+    if (rkt_is_depthwise(poperation))
+       output_channels = 1;
+@@ -40,7 +45,7 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+       pipe_buffer_create(pcontext->screen, 0, PIPE_USAGE_DEFAULT, weights_size);
+    weights_out = pipe_buffer_map(pcontext, rsc, PIPE_MAP_WRITE, &transfer_out);
+ 
+-   unsigned input_channel_groups = WEIGHT_ATOMIC_SIZE;
++   unsigned input_channel_groups = watom;
+    if (rkt_is_depthwise(poperation))
+       input_channel_groups *= 2;
+ 
+@@ -49,15 +54,46 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+    unsigned input_channels_2 = MIN2(input_channels, input_channel_groups);
+ 
+    unsigned n = 0;
+-   for (int oc1 = 0; oc1 < DIV_ROUND_UP(output_channels, WEIGHT_ATOMIC_SIZE);
++   /* TEST (iav RE 2026-08-22): RKT_WLAY=1 — candidate RK3568 layout
++    * [kernel group of 16][tap y*3+x][oc2 0..15][ic]. */
++   if (getenv("RKT_WLAY") && atoi(getenv("RKT_WLAY")) == 2) {
++      /* плоская укладка [oc][ty][tx][ic] для картирования */
++      for (int oc = 0; oc < output_channels; oc++)
++         for (int y = 0; y < weights_height; y++)
++            for (int x = 0; x < weights_width; x++)
++               for (int ic = 0; ic < input_channels; ic++)
++                  weights_out[n++] =
++                     (oc < output_channels_real && ic < input_channels_real)
++                        ? weights_in[oc][x][y][ic] - 0x80 : 0;
++      goto packed;
++   }
++   if (getenv("RKT_WLAY")) {
++      for (int oc1 = 0; oc1 < DIV_ROUND_UP(output_channels, 16); oc1++) {
++         for (int y = 0; y < weights_height; y++) {
++            for (int x = 0; x < weights_width; x++) {
++               for (int oc2 = 0; oc2 < 16; oc2++) {
++                  for (int ic = 0; ic < input_channels; ic++) {
++                     unsigned oc = oc1 * 16 + oc2;
++                     if (oc >= output_channels_real || ic >= input_channels_real)
++                        weights_out[n++] = 0;
++                     else
++                        weights_out[n++] = weights_in[oc][x][y][ic] - 0x80;
++                  }
++               }
++            }
++         }
++      }
++      goto packed;
++   }
++   for (int oc1 = 0; oc1 < DIV_ROUND_UP(output_channels, watom);
+         oc1++) {
+       for (int ic1 = 0; ic1 < input_channels_1; ic1++) {
+          for (int x = 0; x < weights_width; x++) {
+             for (int y = 0; y < weights_height; y++) {
+-               for (int oc2 = 0; oc2 < MIN2(output_channels, WEIGHT_ATOMIC_SIZE);
++               for (int oc2 = 0; oc2 < MIN2(output_channels, watom);
+                     oc2++) {
+                   for (int ic2 = 0; ic2 < input_channels_2; ic2++) {
+-                     unsigned oc = oc1 * WEIGHT_ATOMIC_SIZE + oc2;
++                     unsigned oc = oc1 * watom + oc2;
+                      unsigned ic = ic1 * input_channel_groups + ic2;
+                      if (output_channels_real > 2 &&
+                          oc >= align(output_channels_real, 2))
+@@ -81,6 +117,17 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+       }
+    }
+ 
++packed:
++   /* TEST (iav RE 2026-08-22): RKT_WPOKE=<byte offset> — обнулить всю
++    * упаковку и поставить один байт 127: выход покажет, какой (oc,tap,ic)
++    * этот байт кормит. */
++   if (getenv("RKT_WPOKE")) {
++      unsigned off = strtoul(getenv("RKT_WPOKE"), NULL, 0);
++      memset(weights_out, 0, weights_size);
++      if (off < weights_size)
++         weights_out[off] = 127;
++   }
++
+    if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS)) {
+       static int task = 0;
+       rkt_dump_buffer(weights_out, "weights", 0, task++, 0, weights_size);
+@@ -139,74 +186,74 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+    struct pipe_resource *rsc;
+    uint32_t *biases;
+ 
++   /* RK3568 vendor requant (RE 2026-08-22): the DPU BS stage takes all three
++    * per-channel operands from the BRDMA stream, 8 bytes per channel packed in
++    * groups of four channels: [bias int32 x4][ow int16 x4][mul uint16 x4].
++    *   bias = quantized bias minus the input-zero-point correction (acc domain)
++    *   ow   = weight_zero_point - 0x80 (weights are stored as w - 0x80;
++    *          hardware computes acc - ow * sum(x))
++    *   mul  = per-channel scale multiplier, shift fixed at 14 (BS_MUL_CFG);
++    *          with per-tensor quantization this is exactly 1 << 14, and the
++    *          whole conv_scale lives in OUT_CVT_SCALE/SHIFT as the vendor does.
++    * Stream length follows the padded channel count the RDMA fetches. */
++   unsigned padded_channels = align(output_channels, 32);
++   unsigned weight_zero_point = poperation->conv.weight_tensor->zero_point;
++   uint8_t *stream;
++
++   *truncate_bits = 0;
++
+    rsc = pipe_buffer_create(pcontext->screen, 0, PIPE_USAGE_DEFAULT,
+-                            output_channels * sizeof(uint32_t));
+-   biases = pipe_buffer_map(pcontext, rsc, PIPE_MAP_WRITE, &transfer_out);
+-
+-   // DBG("weight_scale %x\n",
+-   // fui(poperation->conv.weight_tensor->scale));
+-   /* TODO: Figure out when exactly we need to truncate */
+-   /* From
+-    * http://nvdla.org/hw/v1/ias/unit_description.html#convolution-accumulator :
+-    *
+-    * The final result of accumulator in CACC is 48bits for INT16 and 34bits for
+-    * INT8. The bit width between CACC and SDP is 32. For precisions INT8 and
+-    * INT16, there is a round and saturation operation before sending the result
+-    * to SDP. The precision of rounding is configured by field CLIP_TRUNCATE in
+-    * register D_CLIP_CFG. For FP16, the value is just converted from FP48 to
+-    * FP32.
+-    */
+-   if (fui(poperation->conv.weight_tensor->scale) == 0x3a88323f ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c0060de ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c06022d ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c1642e3 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c1e3f51 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c5c8aa8 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c615e93 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c7326a2 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3c783013 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3d1748e6 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3d282992 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3d2e87ae ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3d77f5f6 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3a9a5956 ||
+-       fui(poperation->conv.weight_tensor->scale) == 0x3caebc56)
+-      *truncate_bits = 1;
+-   else
+-      *truncate_bits = 0;
+-
+-   int32_t max_bias = 0;
+-   int32_t max_corr = 0;
+-   unsigned max_num_bits = 0;
+-   bool retry = true;
+-   while (retry) {
+-      for (int oc = 0; oc < output_channels; oc++) {
++                            padded_channels * 8);
++   stream = pipe_buffer_map(pcontext, rsc, PIPE_MAP_WRITE, &transfer_out);
++   biases = (uint32_t *)stream;
++
++   for (unsigned g = 0; g < padded_channels / 4; g++) {
++      int32_t *bias32 = (int32_t *)(stream + g * 32);
++      int16_t *ow16 = (int16_t *)(stream + g * 32 + 16);
++      uint16_t *mul16 = (uint16_t *)(stream + g * 32 + 24);
++
++      for (unsigned j = 0; j < 4; j++) {
++         unsigned oc = g * 4 + j;
++
++         if (oc >= output_channels) {
++            bias32[j] = 0;
++            ow16[j] = 0;
++            mul16[j] = 1 << 14;
++         ow16[j] = 0; /* PROBE4 */
++            continue;
++         }
++
+          int32_t corr =
+             calculate_bias_correction(subgraph, poperation, oc, weights);
+-         biases[oc] = (biases_in[oc] - corr) / (1 << *truncate_bits);
+-
+-         int64_t max_val =
+-            (biases_in[oc] - corr + 255 * 255 * weights_size * weights_size) /
+-            (1 << *truncate_bits);
+-         unsigned num_bits = ceil(log(abs((int32_t)max_val)) / log(2)) + 1;
+-         max_bias = MAX2(max_bias, biases[oc]);
+-         max_corr = MAX2(max_corr, corr);
+-         max_num_bits = MAX2(max_num_bits, num_bits);
+-
+-         /* TODO: This doesn't actually work, num_bits doesn't go above 19, and the
+-          * blob sometimes truncates way below */
+-         if (num_bits > 32) {
+-            (*truncate_bits)++;
+-            retry = true;
+-         } else
+-            retry = false;
++         bias32[j] = biases_in[oc] - corr;
++         /* hardware ADDS ow*sum(x): ow = 0x80 - wzp (Test 42) */
++         ow16[j] = 0x80 - weight_zero_point;
++         mul16[j] = 1 << 14;
++         if (getenv("RKT_WPOKE")) {
++            bias32[j] = 0; ow16[j] = 0; mul16[j] = 1 << 14;
++         }
++         /* TEST probes: RKT_PROBE selects synthetic stream contents */
++         if (getenv("RKT_PROBE")) {
++            int pr = atoi(getenv("RKT_PROBE"));
++            uint16_t *slots = (uint16_t *)(stream + g * 32);
++            unsigned k;
++            switch (pr) {
++            case 1: /* staircase bias, ow 0, mul 1<<14 */
++               bias32[j] = (oc + 1) * 2048; ow16[j] = 0; mul16[j] = 1 << 14;
++               break;
++            case 5: /* globally unique small u16 in every slot */
++               for (k = 0; k < 16; k++)
++                  slots[k] = 4 * (g * 16 + k + 1);
++               break;
++            }
++         }
+       }
+    }
+ 
+    if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS)) {
+       static int task = 0;
+       rkt_dump_buffer((uint8_t *)biases, "biases", 0, task++, 0,
+-                      output_channels * sizeof(uint32_t));
++                      padded_channels * 8);
+    }
+ 
+    pipe_buffer_unmap(pcontext, transfer_out);
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 38e994e3b32..951a05ffbfa 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -331,7 +331,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       feat_mode_cfg |= DPU_FEATURE_MODE_CFG_CONV_MODE(3);
+ 
+    EMIT(REG_DPU_FEATURE_MODE_CFG, feat_mode_cfg);
+-   EMIT(REG_DPU_DATA_FORMAT, 0);
++   /* RK3568 vendor requant (RE 2026-08-22): 0xe0 = BS_MUL_SHIFT_VALUE_NEG=14,
++    * pairs with the shift-14 multiplier stage in BS_MUL_CFG below. */
++   EMIT(REG_DPU_DATA_FORMAT, getenv("RKT_DF0") ? 0 : 0xe0);
+    EMIT(REG_DPU_OFFSET_PEND, 0);
+    EMIT(REG_DPU_DST_BASE_ADDR,
+         rkt_get_tensor(subgraph, operation->output_index)->phys_addr +
+@@ -350,24 +352,27 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_DATA_CUBE_CHANNEL,
+         DPU_DATA_CUBE_CHANNEL_ORIG_CHANNEL(task->output_channels_real - 1) |
+            DPU_DATA_CUBE_CHANNEL_CHANNEL(task->output_channels - 1));
+-   EMIT(REG_DPU_BS_CFG, DPU_BS_CFG_BS_ALU_ALGO(2) | DPU_BS_CFG_BS_ALU_SRC(1) |
+-                           DPU_BS_CFG_BS_RELU_BYPASS(1) |
+-                           DPU_BS_CFG_BS_MUL_BYPASS(1));
++   /* RK3568 vendor requant (RE 2026-08-22): bias, scale multiplier and weight
++    * zero point all come per channel from the BRDMA coefficient stream (see
++    * rkt_fill_biases).  0x148: BS_ALU_SRC=1 (bias from stream), relu bypass,
++    * multiplier stage active.  0xe01: multiplier from stream, shift 14. */
++   EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x148);
+    EMIT(REG_DPU_BS_ALU_CFG, 0);
+-   EMIT(REG_DPU_BS_MUL_CFG, 0);
++   EMIT(REG_DPU_BS_MUL_CFG, 0xe01);
+    EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
+ 
+    if (operation->depthwise) {
+       EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(3) |
+                                  DPU_BS_OW_CFG_SIZE_E_1(3) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(3));
++                                 DPU_BS_OW_CFG_SIZE_E_0(3) | 1); /* OW_SRC: stream */
+    } else {
+       EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(1) |
+                                  DPU_BS_OW_CFG_SIZE_E_1(1) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(1));
++                                 DPU_BS_OW_CFG_SIZE_E_0(1) | 1); /* OW_SRC: stream */
+    }
+ 
+-   EMIT(REG_DPU_BS_OW_OP, DPU_BS_OW_OP_OW_OP(0x80 - weights_zero_point));
++   /* Weight zero point compensation moved into the per-channel stream. */
++   EMIT(REG_DPU_BS_OW_OP, 0);
+ 
+    EMIT(REG_DPU_WDMA_SIZE_0,
+         DPU_WDMA_SIZE_0_CHANNEL_WDMA(task->output_channels - 1));
+@@ -572,7 +577,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       EMIT(REG_DPU_RDMA_RDMA_SRC_BASE_ADDR, 0);
+    }
+ 
+-   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(1));
++   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(7));
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+         rkt_resource(operation->biases)->phys_addr);
+    /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
+@@ -582,7 +587,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * RDMA has nothing to fetch, which matches our DT_RD being exactly 512
+     * bytes (one bias buffer) short of the vendor's. */
+    emit_raw(regs, DPU_RDMA | 0x1, 0x5024, task->output_channels - 1);
+-   EMIT(REG_DPU_RDMA_RDMA_NRDMA_CFG, 0);
++   EMIT(REG_DPU_RDMA_RDMA_NRDMA_CFG, 1); /* bit0 = disable, as vendor */
+    EMIT(REG_DPU_RDMA_RDMA_BN_BASE_ADDR, 0);
+ 
+    unsigned ew_stride =
+@@ -611,6 +616,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_COMB_USE(5);
+    } else {
++      /* RK3568 vendor requant (RE 2026-08-22): the vendor runs every conv task
++       * with 0x4000/0x4006 here -- BURST_LEN=8, MRDMA_DISABLE clear.  With the
++       * three-operand BRDMA stream (DATA_USE=7) the old BURST_LEN=15 |
++       * MRDMA_DISABLE combination scrambles which stream halfword lands in
++       * which BS operand lane. */
+       rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+                             DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
+    }
+@@ -658,16 +668,13 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TRM: before op_en, 64'h0041_xxxx_xxxx_xxxx must be set. */
+    util_dynarray_append_typed(regs, uint64_t, 0x0041000000000000);
+ 
+-   /* Individual sub-unit OP_EN writes. The broadcast target=0x81 is
+-    * RK3588-specific and not supported on RK3568. Direct writes work on both. */
+-   emit_raw(regs, CNA | 0x1, REG_CNA_OPERATION_ENABLE,
+-            CNA_OPERATION_ENABLE_OP_EN(1));
+-   emit_raw(regs, CORE | 0x1, REG_CORE_OPERATION_ENABLE,
+-            CORE_OPERATION_ENABLE_OP_EN(1));
+-   emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_OPERATION_ENABLE,
+-            DPU_RDMA_RDMA_OPERATION_ENABLE_OP_EN(1));
+-   emit_raw(regs, DPU | 0x1, REG_DPU_OPERATION_ENABLE,
+-            DPU_OPERATION_ENABLE_OP_EN(1));
++   /* RK3568 replay bisection (RE 2026-08-22, Test 42): the five units MUST
++    * be started atomically with the vendor broadcast write (target 0x81,
++    * reg 8, 0x1f) -- starting them one at a time desynchronizes the
++    * pipeline and scrambles which BRDMA stream halfword lands in which BS
++    * operand lane (41%% of the output bytes of a known-good vendor task go
++    * wrong with sequential OP_EN writes, byte-exact with the broadcast). */
++   util_dynarray_append_typed(regs, uint64_t, 0x00810000001f0008);
+ }
+ 
+ void
+-- 
+2.53.0
+
+
+From be39766243f54ddf85bdf43700b30367be8f8970 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 20:00:27 +0300
+Subject: [PATCH 17/20] rocket: RK3568 native 8-channel feature atomics end to
+ end
+
+The RK3568 NPU feature format is planar 8-channel surfaces with 8 bytes
+per pixel (surface stride W*H*8), and every CNA/DPU stride register is
+in 8-byte units -- half the RK3588 sizes mesa assumed.  Verified against
+a live vendor capture of a 28x28x32 3x3 probe (input impulse at (3,14,0)
+lands at byte (3*28+14)*8) and against all 51 mobilenet_v1 vendor tasks:
+
+- input packing and output readback: planar 8-channel groups;
+- DATA_ENTRIES = W * ceil(C/8) / 4 (32-byte CBUF entries, 8-ch atomics);
+- CBUF is 8 banks of 32 KiB (1024 entries); data banks take the minimum,
+  weights get the rest -- reproduces every vendor CBUF_CON0/CON1 value;
+- band split offsets are rows * W * 8 bytes;
+- weight layout for regular convolutions: 16-kernel groups, tap-major,
+  32-channel input slices above the kernels (byte-exact vs vendor);
+- per-tensor requant variant (BS MUL_BYPASS, OW from BS_OW_OP register,
+  bias-only BRDMA stream) as the vendor emits for per-tensor models.
+
+Full probe suite (identity, id64, d32, dic, dtap, c28, conv-56, pw-112,
+dw-112, dw-s2, conv-s2-112, first-16ch) now matches TFLite CPU within
++/-1 LSB on uniform fills, row/column gradients, channel codes and a
+mixed spatial-channel pattern.  Remaining known gap: the ARGB first
+layer path (Cin=3), so whole-model mobilenet_v1 still diverges.
+---
+ src/gallium/drivers/rocket/rkt_coefs.c  | 59 +++++++++++++++++++++++++
+ src/gallium/drivers/rocket/rkt_ml.c     | 37 +++++++++++-----
+ src/gallium/drivers/rocket/rkt_ml.h     |  7 ++-
+ src/gallium/drivers/rocket/rkt_regcmd.c | 43 +++++++++++-------
+ src/gallium/drivers/rocket/rkt_task.c   | 25 ++++++-----
+ 5 files changed, 130 insertions(+), 41 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index 106f442ef60..9def8f0293e 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -5,6 +5,7 @@
+ 
+ #include "util/u_inlines.h"
+ 
++#include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include "rkt_coefs.h"
+@@ -54,6 +55,46 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+    unsigned input_channels_2 = MIN2(input_channels, input_channel_groups);
+ 
+    unsigned n = 0;
++   if (!rkt_is_depthwise(poperation)) {
++      /* RK3568 regular-conv weight layout, solved by probe-model RE
++       * (2026-08-22, Test 43): known-weight models converted with
++       * rknn-toolkit2 for rk3568 carry the packed buffer in the .rknn, and
++       * marker weights give the exact byte positions:
++       *
++       *   pos(oc, ky, kx, ic) = (oc / 16) * KH*KW*16*icb
++       *                       + (ky*KW + kx) * 16*icb
++       *                       + (oc %% 16) * icb + ic,   icb = align(Cin, 16)
++       *
++       * i.e. kernel groups of SIXTEEN (not 32 as on RK3588), tap-major inside
++       * a group, 16 kernels per tap block, ic last.  Bytes are w - 0x80. */
++      /* ic dimension is cut into 32-channel slices that sit ABOVE the
++       * 16-kernel rows (verified with a Cin=64 probe model: kernel row is
++       * always at most 32 bytes). */
++      unsigned rowic = MIN2(align(input_channels_real, 16), 32);
++      unsigned slices = DIV_ROUND_UP(input_channels_real, 32);
++      unsigned kgroups = DIV_ROUND_UP(output_channels_real, 16);
++      unsigned slcblk = 16 * rowic;
++      unsigned tapblk = slices * slcblk;
++      unsigned grpblk = weights_width * weights_height * tapblk;
++
++      memset(weights_out, zero_point - 0x80, weights_size);
++      for (unsigned oc = 0; oc < output_channels_real; oc++) {
++         for (unsigned ky = 0; ky < weights_width; ky++) {
++            for (unsigned kx = 0; kx < weights_height; kx++) {
++               for (unsigned ic = 0; ic < input_channels_real; ic++) {
++                  unsigned pos = (oc / 16) * grpblk +
++                                 (ky * weights_height + kx) * tapblk +
++                                 (ic / 32) * slcblk +
++                                 (oc % 16) * rowic + (ic % 32);
++                  weights_out[pos] = weights_in[oc][ky][kx][ic] - 0x80;
++               }
++            }
++         }
++      }
++      n = kgroups * grpblk;
++      assert(n <= weights_size);
++      goto packed;
++   }
+    /* TEST (iav RE 2026-08-22): RKT_WLAY=1 — candidate RK3568 layout
+     * [kernel group of 16][tap y*3+x][oc2 0..15][ic]. */
+    if (getenv("RKT_WLAY") && atoi(getenv("RKT_WLAY")) == 2) {
+@@ -118,6 +159,10 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+    }
+ 
+ packed:
++   if (getenv("RKT_WDUMP")) {
++      FILE *f = fopen(getenv("RKT_WDUMP"), "wb");
++      if (f) { fwrite(weights_out, 1, weights_size, f); fclose(f); }
++   }
+    /* TEST (iav RE 2026-08-22): RKT_WPOKE=<byte offset> — обнулить всю
+     * упаковку и поставить один байт 127: выход покажет, какой (oc,tap,ic)
+     * этот байт кормит. */
+@@ -197,6 +242,7 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+     *          whole conv_scale lives in OUT_CVT_SCALE/SHIFT as the vendor does.
+     * Stream length follows the padded channel count the RDMA fetches. */
+    unsigned padded_channels = align(output_channels, 32);
++   bool bias_only_stream = true; /* per-tensor scheme (vendor probe-D2) */
+    unsigned weight_zero_point = poperation->conv.weight_tensor->zero_point;
+    uint8_t *stream;
+ 
+@@ -207,6 +253,16 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+    stream = pipe_buffer_map(pcontext, rsc, PIPE_MAP_WRITE, &transfer_out);
+    biases = (uint32_t *)stream;
+ 
++   if (bias_only_stream) {
++      int32_t *b32 = (int32_t *)stream;
++      for (unsigned oc = 0; oc < padded_channels; oc++) {
++         if (oc >= output_channels) { b32[oc] = 0; continue; }
++         int32_t corr =
++            calculate_bias_correction(subgraph, poperation, oc, weights);
++         b32[oc] = biases_in[oc] - corr;
++      }
++      goto stream_done;
++   }
+    for (unsigned g = 0; g < padded_channels / 4; g++) {
+       int32_t *bias32 = (int32_t *)(stream + g * 32);
+       int16_t *ow16 = (int16_t *)(stream + g * 32 + 16);
+@@ -229,6 +285,8 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+          /* hardware ADDS ow*sum(x): ow = 0x80 - wzp (Test 42) */
+          ow16[j] = 0x80 - weight_zero_point;
+          mul16[j] = 1 << 14;
++         if (getenv("RKT_MULSH"))
++            mul16[j] = 1 << (14 - atoi(getenv("RKT_MULSH")));
+          if (getenv("RKT_WPOKE")) {
+             bias32[j] = 0; ow16[j] = 0; mul16[j] = 1 << 14;
+          }
+@@ -250,6 +308,7 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+       }
+    }
+ 
++stream_done:
+    if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS)) {
+       static int task = 0;
+       rkt_dump_buffer((uint8_t *)biases, "biases", 0, task++, 0,
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index ae090abbd91..7961eeb4af1 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -452,13 +452,16 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+                }
+             }
+          } else {
++            /* RK3568 feature layout (verified against the live vendor
++             * capture, probe-D2 impulses 2026-08-22): 8 bytes per pixel
++             * carrying 8 channels, planar 8-channel surfaces of stride
++             * W*H*8; all CNA/DPU strides are in 8-byte units. */
+             unsigned n = 0;
+-            for (int u = 0; u < DIV_ROUND_UP(input_channels, FEATURE_ATOMIC_SIZE);
+-                 u++) {
++            for (int u = 0; u < DIV_ROUND_UP(input_channels, 8); u++) {
+                for (int x = 0; x < input_width; x++) {
+                   for (int y = 0; y < input_height; y++) {
+-                     for (int c = 0; c < FEATURE_ATOMIC_SIZE; c++) {
+-                        unsigned input_channel = c + u * FEATURE_ATOMIC_SIZE;
++                     for (int c = 0; c < 8; c++) {
++                        unsigned input_channel = c + u * 8;
+                         if (input_channel < input_channels)
+                            map[n++] = input_in[x][y][input_channel] - 0x80;
+                         else
+@@ -575,8 +578,13 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+          rkt_get_tensor(subgraph, output_idxs[i]);
+       struct pipe_transfer *transfer = NULL;
+       uint8_t *raw_output;
++      /* RK3568 DPU output layout (RE 2026-08-22, layer-c28 quadrant map):
++       * surfaces of 8 channels, 8 bytes per pixel, surface stride
++       * Wout * Hout * 8 -- matches the vendor DST_SURF_STRIDE (0x1880 =
++       * 28*28*8 for the 28x28 probe).  The previous 16-channel unpack only
++       * looked correct on channel-uniform fills. */
+       uint8_t(*output_in)[operation->output_height][operation->output_width]
+-                         [FEATURE_ATOMIC_SIZE];
++                         [8];
+       uint8_t(*output_out)[operation->output_width][operation->output_channels];
+ 
+       DBG("Before pipe_buffer_map\n");
+@@ -592,12 +600,19 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+       if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS))
+          rkt_dump_buffer(raw_output, "output", 0, 0, 0, output_tensor->bo_size);
+ 
+-      for (int oc = 0; oc < operation->output_channels; oc++) {
+-         for (int x = 0; x < operation->output_width; x++) {
+-            for (int y = 0; y < operation->output_height; y++) {
+-               unsigned c = oc % FEATURE_ATOMIC_SIZE;
+-               unsigned g = oc / FEATURE_ATOMIC_SIZE;
+-               output_out[y][x][oc] = output_in[g][y][x][c] + 0x80;
++      {
++         /* Same planar 8-channel / 8-byte-pixel layout as the input side
++          * (verified against the live vendor capture 2026-08-22). */
++         uint8_t *raw = (uint8_t *)output_in;
++         unsigned rows = operation->output_width;   /* dims[1] */
++         unsigned cols = operation->output_height;  /* dims[2] */
++         for (int oc = 0; oc < operation->output_channels; oc++) {
++            unsigned g = oc / 8, c = oc % 8;
++            for (unsigned y = 0; y < rows; y++) {
++               for (unsigned x = 0; x < cols; x++) {
++                  output_out[y][x][oc] =
++                     raw[g * rows * cols * 8 + (y * cols + x) * 8 + c] + 0x80;
++               }
+             }
+          }
+       }
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index 7dfbd26b327..56456f523e3 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -17,13 +17,16 @@
+  * per row that first band needs 128 slices, which only fits if a bank holds
+  * 256 entries of 256 bytes.  With 32768 mesa computed half the capacity and
+  * split the same layer into five bands instead of two. */
+-#define CBUF_BANK_SIZE        65536
++/* RK3568 (RE 2026-08-22): 8 banks of 32 KiB, 32-byte entries (1024 per
++ * bank).  Verified against all 51 mobilenet_v1 vendor tasks: data banks =
++ * ceil(entries_per_slice * H / 1024), weight banks = 8 - data banks. */
++#define CBUF_BANK_SIZE        32768
+ /* CBUF_BANKS is SoC-specific:
+  *   RK3588: 12 banks (384 KiB CBUF)
+  *   RK3568:  8 banks (256 KiB CBUF) — per RK3568 TRM Part2 section 9.1
+  * TODO: select per-SoC at runtime via rkt_device. */
+ #define CBUF_BANKS            8
+-#define CBUF_ENTRIES_PER_BANK 256
++#define CBUF_ENTRIES_PER_BANK 1024
+ #define CBUF_ENTRY_SIZE       (CBUF_BANK_SIZE / CBUF_ENTRIES_PER_BANK)
+ #define FEATURE_ATOMIC_SIZE   16
+ #define WEIGHT_ATOMIC_SIZE    32
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 951a05ffbfa..48214289c51 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -168,7 +168,10 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
+     * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
+    emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
+-            (task->input_width << 16) | task->input_data_entries);
++            (task->input_width << 16) |
++               (getenv("RKT_ENTV")
++                   ? task->input_width * task->input_channels / 32
++                   : task->input_data_entries));
+ 
+    if (task->input_channels_real == 1) {
+       unsigned truncate = 14;
+@@ -333,7 +336,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_FEATURE_MODE_CFG, feat_mode_cfg);
+    /* RK3568 vendor requant (RE 2026-08-22): 0xe0 = BS_MUL_SHIFT_VALUE_NEG=14,
+     * pairs with the shift-14 multiplier stage in BS_MUL_CFG below. */
+-   EMIT(REG_DPU_DATA_FORMAT, getenv("RKT_DF0") ? 0 : 0xe0);
++   EMIT(REG_DPU_DATA_FORMAT, 0);
+    EMIT(REG_DPU_OFFSET_PEND, 0);
+    EMIT(REG_DPU_DST_BASE_ADDR,
+         rkt_get_tensor(subgraph, operation->output_index)->phys_addr +
+@@ -356,29 +359,30 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * zero point all come per channel from the BRDMA coefficient stream (see
+     * rkt_fill_biases).  0x148: BS_ALU_SRC=1 (bias from stream), relu bypass,
+     * multiplier stage active.  0xe01: multiplier from stream, shift 14. */
+-   EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x148);
++   EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x158);
+    EMIT(REG_DPU_BS_ALU_CFG, 0);
+-   EMIT(REG_DPU_BS_MUL_CFG, 0xe01);
++   EMIT(REG_DPU_BS_MUL_CFG, 0);
+    EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
+ 
+    if (operation->depthwise) {
+       EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(3) |
+                                  DPU_BS_OW_CFG_SIZE_E_1(3) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(3) | 1); /* OW_SRC: stream */
++                                 DPU_BS_OW_CFG_SIZE_E_0(3));
+    } else {
+       EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(1) |
+                                  DPU_BS_OW_CFG_SIZE_E_1(1) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(1) | 1); /* OW_SRC: stream */
++                                 DPU_BS_OW_CFG_SIZE_E_0(1));
+    }
+ 
+-   /* Weight zero point compensation moved into the per-channel stream. */
+-   EMIT(REG_DPU_BS_OW_OP, 0);
++   EMIT(REG_DPU_BS_OW_OP, DPU_BS_OW_OP_OW_OP(0x80 - weights_zero_point));
+ 
+-   EMIT(REG_DPU_WDMA_SIZE_0,
+-        DPU_WDMA_SIZE_0_CHANNEL_WDMA(task->output_channels - 1));
+-   EMIT(REG_DPU_WDMA_SIZE_1,
+-        DPU_WDMA_SIZE_1_HEIGHT_WDMA(task->output_height - 1) |
+-           DPU_WDMA_SIZE_1_WIDTH_WDMA(task->output_width - 1));
++   if (!getenv("RKT_NOWDMA")) {
++      EMIT(REG_DPU_WDMA_SIZE_0,
++           DPU_WDMA_SIZE_0_CHANNEL_WDMA(task->output_channels - 1));
++      EMIT(REG_DPU_WDMA_SIZE_1,
++           DPU_WDMA_SIZE_1_HEIGHT_WDMA(task->output_height - 1) |
++              DPU_WDMA_SIZE_1_WIDTH_WDMA(task->output_width - 1));
++   }
+    EMIT(REG_DPU_BN_CFG,
+         DPU_BN_CFG_BN_RELU_BYPASS(1) | DPU_BN_CFG_BN_MUL_BYPASS(1) |
+            DPU_BN_CFG_BN_ALU_BYPASS(1) | DPU_BN_CFG_BN_BYPASS(1));
+@@ -536,6 +540,8 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       if (scale < 1 << 14)
+          scale |= 1 << 14;
+ 
++      if (getenv("RKT_MULSH"))
++         shift -= atoi(getenv("RKT_MULSH"));
+       EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(scale));
+       EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(shift - 1));
+    }
+@@ -577,7 +583,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       EMIT(REG_DPU_RDMA_RDMA_SRC_BASE_ADDR, 0);
+    }
+ 
+-   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(7));
++   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(1));
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+         rkt_resource(operation->biases)->phys_addr);
+    /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
+@@ -586,7 +592,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * of mobilenet_v1 (10 distinct values, all matching).  Without it the bias
+     * RDMA has nothing to fetch, which matches our DT_RD being exactly 512
+     * bytes (one bias buffer) short of the vendor's. */
+-   emit_raw(regs, DPU_RDMA | 0x1, 0x5024, task->output_channels - 1);
++   emit_raw(regs, DPU_RDMA | 0x1, 0x5024, task->output_channels * 4 / 8 - 1);
+    EMIT(REG_DPU_RDMA_RDMA_NRDMA_CFG, 1); /* bit0 = disable, as vendor */
+    EMIT(REG_DPU_RDMA_RDMA_BN_BASE_ADDR, 0);
+ 
+@@ -621,8 +627,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+        * three-operand BRDMA stream (DATA_USE=7) the old BURST_LEN=15 |
+        * MRDMA_DISABLE combination scrambles which stream halfword lands in
+        * which BS operand lane. */
+-      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+-                            DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
++      if (getenv("RKT_FEAT4000"))
++         rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(8);
++      else
++         rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
++                               DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
+    }
+ 
+    if (operation->depthwise)
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index c1936c4583c..36617fe99bb 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -9,10 +9,12 @@
+ static unsigned
+ calc_entries_per_slice(struct rkt_operation *operation)
+ {
+-   unsigned bpe = sizeof(uint8_t);
+-   unsigned atomics_per_entry = CBUF_ENTRY_SIZE / FEATURE_ATOMIC_SIZE;
+-   unsigned total_c_atomics =
+-      DIV_ROUND_UP(operation->input_channels * bpe, FEATURE_ATOMIC_SIZE);
++   /* RK3568 (RE 2026-08-22): the feature atomic is 8 channels (8 bytes) and a
++    * CBUF entry is 32 bytes (4 atomics) -- half the RK3588 sizes.  Verified
++    * against all 51 mobilenet_v1 vendor tasks: entries = W * ceil(C/8) / 4
++    * reproduces every DATA_ENTRIES value (C = 8..512, W = 7..224). */
++   unsigned atomics_per_entry = 4;
++   unsigned total_c_atomics = DIV_ROUND_UP(operation->input_channels, 8);
+    unsigned last_c_atomics = total_c_atomics % atomics_per_entry;
+    unsigned int_c_entries =
+       (total_c_atomics / atomics_per_entry) * operation->input_width;
+@@ -138,13 +140,11 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+ 
+    if (task->input_channels_real == 1)
+       task->input_data_entries = task->input_width * task->input_height;
+-   else if (task->input_width == 40 && task->input_channels_real == 40)
+-      task->input_data_entries = 40;
+    else
++      /* RK3568: entries = W * ceil(C/8) / 4 (8-ch atomics, 32-byte entries);
++       * matches the vendor stream for every mobilenet_v1 task. */
+       task->input_data_entries = DIV_ROUND_UP(
+-         task->input_width * 2 *
+-            DIV_ROUND_UP(task->input_channels_real, FEATURE_ATOMIC_SIZE),
+-         8);
++         task->input_width * DIV_ROUND_UP(task->input_channels, 8), 4);
+ 
+    task->weights_width = operation->weights_width;
+    task->weights_height = operation->weights_height;
+@@ -345,10 +345,13 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+             cur_task->input_height = consumed;
+       }
+ 
++      /* RK3568: planar 8-channel surfaces, 8 bytes per pixel -- a band
++       * offset is rows * W * 8 (the per-surface stride register covers the
++       * upper channel groups). */
+       cur_task->input_offset =
+-         calc_line_stride(operation->input_width) * cur_task->top_slice;
++         operation->input_width * 8 * cur_task->top_slice;
+       cur_task->output_offset =
+-         calc_line_stride(operation->output_width) * output_height_processed;
++         operation->output_width * 8 * output_height_processed;
+ 
+       cur_task->input_banks = available_input_banks;
+       cur_task->weights_banks = available_weights_banks;
+-- 
+2.53.0
+
+
+From fa07b52bb1019ac8fa6a2e60ebed8007fc86aef3 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 21:05:34 +0300
+Subject: [PATCH 18/20] rocket: RK3568 ARGB first-layer path (Cin=3)
+
+Vendor-verified against a live probe-RGB capture and the mobilenet_v1
+task stream:
+
+- CONV_CON1 ARGB_IN=10, RGB_BYTELENGTH = W * H_band * 9;
+- input: packed RGB rows (3 bytes per pixel) aligned to 8 bytes, raw
+  uint8 -- the CNA CVT stage shifts into the signed domain with
+  scale 16384 / offset -128 / truncate 14 (alpha lane scale 1);
+- weight layout: same 16-kernel tap-major grouping with an 8-byte
+  kernel row (ic then zero padding, byte-exact vs probe-RGB);
+- band offsets in packed-RGB bytes; DATA_ENTRIES = align(ceil(W*8/32),2).
+
+Also adds TEFLON_MAX_OPS=<K> (delegate only the first K plan nodes) for
+layer-by-layer bisection of chained networks.
+
+layer-first-rgb (224x224x3 -> 112, stride 2) now matches TFLite CPU
+within 1 LSB on all probe patterns.  mobilenet_v1 still diverges from
+op 3 on: depthwise with 64 channels -- the vendor emits those as
+32-channel tasks; channel splitting is the next step.
+---
+ src/gallium/drivers/rocket/rkt_coefs.c    |  6 +++-
+ src/gallium/drivers/rocket/rkt_ml.c       | 14 ++++++++-
+ src/gallium/drivers/rocket/rkt_regcmd.c   | 35 +++++++++++++++++++----
+ src/gallium/drivers/rocket/rkt_task.c     | 28 ++++++++++++++----
+ src/gallium/frontends/teflon/tfl_device.c |  7 +++++
+ 5 files changed, 76 insertions(+), 14 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index 9def8f0293e..7049c8a0952 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -70,7 +70,11 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+       /* ic dimension is cut into 32-channel slices that sit ABOVE the
+        * 16-kernel rows (verified with a Cin=64 probe model: kernel row is
+        * always at most 32 bytes). */
+-      unsigned rowic = MIN2(align(input_channels_real, 16), 32);
++      /* ARGB / few-channel input (Cin<=8, probe-RGB byte-exact): the kernel
++       * row is 8 bytes -- ic then zero padding to 8. */
++      unsigned rowic = input_channels_real <= 8
++                          ? 8
++                          : MIN2(align(input_channels_real, 16), 32);
+       unsigned slices = DIV_ROUND_UP(input_channels_real, 32);
+       unsigned kgroups = DIV_ROUND_UP(output_channels_real, 16);
+       unsigned slcblk = 16 * rowic;
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 7961eeb4af1..84f0fb5fba8 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -441,7 +441,19 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+           * convert to signed. The DMA unit seems to be able to convert from
+           * unsigned to signed though.
+           */
+-         if (input_channels == 1) {
++         if (input_channels == 3) {
++            /* ARGB input: packed RGB, raw uint8 (the CNA CVT stage shifts by
++             * -128), rows aligned to 8 bytes with zero padding. */
++            unsigned line = DIV_ROUND_UP(input_height * 3, 8) * 8;
++            for (int x = 0; x < input_width; x++) {
++               unsigned n = x * line;
++               for (int y = 0; y < input_height; y++)
++                  for (int c = 0; c < 3; c++)
++                     map[n++] = input_in[x][y][c];
++               for (; n < (x + 1) * line;)
++                  map[n++] = 0;
++            }
++         } else if (input_channels == 1) {
+             unsigned n = 0;
+             for (int x = 0; x < input_width; x++) {
+                for (int y = 0; y < MAX2(input_height, FEATURE_ATOMIC_SIZE); y++) {
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 48214289c51..de507ea68e8 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -112,6 +112,10 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+               CNA_CONV_CON1_ARGB_IN(8);
+    }
+ 
++   /* ARGB (Cin=3) first-layer mode: packed RGB input (vendor: 0xa000). */
++   if (task->input_channels_real == 3)
++      con1 |= CNA_CONV_CON1_ARGB_IN(10);
++
+    if (operation->depthwise)
+       con1 |= CNA_CONV_CON1_CONV_MODE(3);
+ 
+@@ -139,11 +143,15 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * input byte count. */
+    /* TEST (iav RE, 2026-08-21): the vendor writes RGB_BYTELENGTH only for the
+     * ARGB first layer and leaves this at zero everywhere else. */
++   /* ARGB: the vendor writes W * H * 9 here for the RGB first layer. */
+    EMIT(REG_CNA_CONV_CON4,
+-        con1 ? CNA_CONV_CON4_RGB_BYTELENGTH(task->input_width *
+-                                            task->input_height *
+-                                            task->input_channels)
+-             : 0);
++        task->input_channels_real == 3
++           ? CNA_CONV_CON4_RGB_BYTELENGTH(task->input_width *
++                                          task->input_height * 9)
++           : (con1 ? CNA_CONV_CON4_RGB_BYTELENGTH(task->input_width *
++                                                  task->input_height *
++                                                  task->input_channels)
++                   : 0));
+    EMIT(REG_CNA_DATA_SIZE0,
+         CNA_DATA_SIZE0_DATAIN_WIDTH(task->input_width) |
+            CNA_DATA_SIZE0_DATAIN_HEIGHT(task->input_height));
+@@ -168,12 +176,27 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
+     * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
+    emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
+-            (task->input_width << 16) |
++            ((task->input_channels_real == 3 ? align(task->input_width, 32)
++                                             : task->input_width)
++             << 16) |
+                (getenv("RKT_ENTV")
+                    ? task->input_width * task->input_channels / 32
+                    : task->input_data_entries));
+ 
+-   if (task->input_channels_real == 1) {
++   if (task->input_channels_real == 3) {
++      /* ARGB CVT: (x - 128) * 16384 >> 14 = x - 128 -- shift the raw uint8
++       * input into the signed domain the rest of the pipeline expects; the
++       * alpha lane gets scale 1.  (0xe38e1 = truncate 14 on all three RGB
++       * lanes, vendor-exact.) */
++      emit_raw(regs, CNA | 0x1, REG_CNA_CVT_CON0, 0x000e38e1);
++      EMIT(REG_CNA_CVT_CON1,
++           CNA_CVT_CON1_CVT_SCALE0(16384) | CNA_CVT_CON1_CVT_OFFSET0(0xff80));
++      EMIT(REG_CNA_CVT_CON2,
++           CNA_CVT_CON2_CVT_SCALE1(16384) | CNA_CVT_CON2_CVT_OFFSET1(0xff80));
++      EMIT(REG_CNA_CVT_CON3,
++           CNA_CVT_CON3_CVT_SCALE2(16384) | CNA_CVT_CON3_CVT_OFFSET2(0xff80));
++      EMIT(REG_CNA_CVT_CON4, CNA_CVT_CON4_CVT_SCALE3(1));
++   } else if (task->input_channels_real == 1) {
+       unsigned truncate = 14;
+       unsigned scale = 16384;
+       unsigned offset = 65408;
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 36617fe99bb..6697b37ac28 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -78,8 +78,10 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+ 
+    task->input_height = operation->input_height;
+    task->input_channels =
+-      align(MAX2(operation->input_channels, FEATURE_ATOMIC_SIZE),
+-            FEATURE_ATOMIC_SIZE);
++      operation->input_channels == 3
++         ? 8
++         : align(MAX2(operation->input_channels, FEATURE_ATOMIC_SIZE),
++                 FEATURE_ATOMIC_SIZE);
+    task->input_channels_real = operation->input_channels;
+    task->input_zero_point = operation->input_zero_point;
+    task->input_scale = operation->input_scale;
+@@ -118,10 +120,16 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+       } else
+          task->input_surface_stride =
+             (float)task->input_line_stride * (((float)task->input_height) - 1);
++   } else if (operation->input_channels == 3) {
++      /* ARGB input: packed RGB rows aligned to 8 bytes; strides are in
++       * 8-byte units (vendor probe-RGB: W=28 -> line 11, surf 784). */
++      task->input_line_stride =
++         DIV_ROUND_UP(operation->input_width * 3, 8);
++      task->input_surface_stride =
++         operation->input_width * operation->input_height;
+    } else {
+-      /* RK3568 (vendor librknnrt 1.5.2, RE 2026-08-20): both CNA DMA strides
+-       * are in 16-byte cells: line_stride = Win, surf_stride = Win * Hin.
+-       * The old /4 and (Hin/4 - 1) were RK3588-era magic. */
++      /* RK3568: strides are in 8-byte units; the numbers coincide with the
++       * old 16-byte-cell reading (W and W*H) for the feature layout. */
+       task->input_line_stride =
+          calc_line_stride(operation->input_width) / FEATURE_ATOMIC_SIZE;
+       task->input_surface_stride =
+@@ -140,6 +148,11 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+ 
+    if (task->input_channels_real == 1)
+       task->input_data_entries = task->input_width * task->input_height;
++   else if (task->input_channels_real == 3)
++      /* ARGB: entries = ceil(W*8/32) rounded up to even (vendor: 28->8,
++       * 224->56). */
++      task->input_data_entries =
++         align(DIV_ROUND_UP(task->input_width * 8, 32), 2);
+    else
+       /* RK3568: entries = W * ceil(C/8) / 4 (8-ch atomics, 32-byte entries);
+        * matches the vendor stream for every mobilenet_v1 task. */
+@@ -349,7 +362,10 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+        * offset is rows * W * 8 (the per-surface stride register covers the
+        * upper channel groups). */
+       cur_task->input_offset =
+-         operation->input_width * 8 * cur_task->top_slice;
++         (operation->input_channels == 3
++             ? DIV_ROUND_UP(operation->input_width * 3, 8) * 8
++             : operation->input_width * 8) *
++         cur_task->top_slice;
+       cur_task->output_offset =
+          operation->output_width * 8 * output_height_processed;
+ 
+diff --git a/src/gallium/frontends/teflon/tfl_device.c b/src/gallium/frontends/teflon/tfl_device.c
+index 012dfacd74f..4e680e6e328 100644
+--- a/src/gallium/frontends/teflon/tfl_device.c
++++ b/src/gallium/frontends/teflon/tfl_device.c
+@@ -893,6 +893,13 @@ PrepareDelegate(TfLiteContext *tf_context, TfLiteDelegate *tf_delegate)
+          tf_context, node_index, &node, &registration));
+ 
+       supported = check_op_support(tf_delegate, tf_context, node, registration);
++      /* TEST (iav RE): TEFLON_MAX_OPS=K delegates only the first K supported
++       * plan nodes -- layer bisection for chained-network debugging. */
++      {
++         const char *mo = getenv("TEFLON_MAX_OPS");
++         if (mo && i >= atoi(mo))
++            supported = false;
++      }
+ 
+       teflon_debug("%3d %-15s v%-2d %-11s in:", node_index,
+                    tflite_builtin_op_name(registration->builtin_code),
+-- 
+2.53.0
+
+
+From 96c6ea32da99c4c4ff9653e522805d842e6a72f5 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 21:52:09 +0300
+Subject: [PATCH 19/20] rocket: RK3568 depthwise 32-channel groups; keep
+ oversized FC on CPU
+
+Depthwise convolutions with more than 32 channels run as one task per
+32-channel group, mirroring the vendor stream (mobilenet_v1 t6..t9:
+full tasks for group 0, address-delta tasks for group 1):
+
+- every band is duplicated per group; the group shifts the feature
+  address by Win*Hin*32, the weight pointer (DCOMP_ADDR0) by KH*KW*32,
+  the destination by Wout*Hout*32 and the BS stream by 32 channels;
+- the depthwise weight buffer becomes [group][tap][32 channels] so the
+  per-group weight offset lands on a group boundary;
+- CBUF_CON0 WEIGHT_REUSE is dropped on the first task of each group --
+  new group, new weights (this was the actual garbage source: group 1
+  silently reused group 0 weights);
+- entries_per_slice uses the 32-channel group size for band sizing,
+  matching the vendor band heights.
+
+Fully-connected-shaped convolutions whose weights exceed the 256 KiB
+CBUF (the final 1024->1001 1x1) are reported unsupported until the
+vendor fp16 FC mode is implemented; the conv path wedges on them.
+
+Adds TEFLON_MIN_OPS (with TEFLON_MAX_OPS: delegate a window of plan
+nodes) and RKT_MAXROWS (force extra bands) debug knobs.
+
+mobilenet_v1 end to end on the NPU: 87 ms vs 117 ms CPU, zero job
+timeouts, logit mean abs diff 0.11 (max ~48), 4 of top-5 classes match
+the CPU reference.  The layer probe suite stays at max 1 LSB.
+---
+ src/gallium/drivers/rocket/rkt_coefs.c  | 16 ++++++++
+ src/gallium/drivers/rocket/rkt_ml.c     | 12 ++++++
+ src/gallium/drivers/rocket/rkt_ml.h     |  4 ++
+ src/gallium/drivers/rocket/rkt_regcmd.c | 27 ++++++++++---
+ src/gallium/drivers/rocket/rkt_task.c   | 50 ++++++++++++++++++++++++-
+ 5 files changed, 102 insertions(+), 7 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index 7049c8a0952..62281ce1569 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -55,6 +55,22 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+    unsigned input_channels_2 = MIN2(input_channels, input_channel_groups);
+ 
+    unsigned n = 0;
++   if (rkt_is_depthwise(poperation) && input_channels_real > 32) {
++      /* RK3568 depthwise with C>32: one 32-channel group per task; the
++       * weight buffer is [group][tap (row-major)][32 channels], so the
++       * per-group DCOMP_ADDR0 offset of KH*KW*32 bytes lands on a group
++       * boundary (vendor mobilenet_v1 t8: DCOMP_ADDR0 = 288). */
++      for (unsigned g = 0; g < DIV_ROUND_UP(input_channels_real, 32); g++)
++         for (int y = 0; y < weights_height; y++)
++            for (int x = 0; x < weights_width; x++)
++               for (unsigned c = 0; c < 32; c++) {
++                  unsigned ic = g * 32 + c;
++                  weights_out[n++] = ic < input_channels_real
++                                        ? weights_in[0][y][x][ic] - 0x80
++                                        : 0;
++               }
++      goto packed;
++   }
+    if (!rkt_is_depthwise(poperation)) {
+       /* RK3568 regular-conv weight layout, solved by probe-model RE
+        * (2026-08-22, Test 43): known-weight models converted with
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 84f0fb5fba8..78b9bec2427 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -285,6 +285,18 @@ rkt_ml_operation_supported(struct pipe_ml_device *pdevice,
+           operation->conv.dilation_height_factor == 1)
+          supported = true;
+ 
++      /* RK3568: a fully-connected-shaped convolution whose weights exceed
++       * the 256 KiB CBUF (e.g. the final 1024->1001 1x1 of mobilenet_v1)
++       * needs the vendor fp16 FC mode, which is not implemented yet -- the
++       * current conv path wedges on it (job timeout). */
++      {
++         unsigned kernels = weight_tensor->dims[0];
++         unsigned wbytes = kernels * weight_tensor->dims[1] *
++                           weight_tensor->dims[2] * weight_tensor->dims[3];
++         if (wbytes > 7 * CBUF_BANK_SIZE)
++            supported = false;
++      }
++
+       break;
+    }
+    case PIPE_ML_OPERATION_TYPE_ADD:
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index 56456f523e3..9ca0e7e8075 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -33,6 +33,10 @@
+ #define ATOMIC_K_SIZE         16
+ 
+ struct split_task {
++   /* RK3568 depthwise with more than 32 channels runs as one task per
++    * 32-channel group (vendor: full tasks + address-delta tasks); all
++    * buffer addresses shift by this group index. */
++   unsigned channel_group;
+    unsigned num;
+ 
+    unsigned top_slice;
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index de507ea68e8..2f486631ce4 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -71,8 +71,15 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    uint32_t con0 = CNA_CBUF_CON0_WEIGHT_BANK(task->weights_banks) |
+                    CNA_CBUF_CON0_DATA_BANK(task->input_banks);
+-   if (task_num > 0 && operation->reuse_weights_cbuf)
+-      con0 |= CNA_CBUF_CON0_WEIGHT_REUSE(1);
++   if (task_num > 0 && operation->reuse_weights_cbuf) {
++      /* A new depthwise 32-channel group brings new weights -- no reuse on
++       * the first task of each group (vendor t8: CBUF_CON0 without the
++       * reuse bit). */
++      struct split_task *prev = util_dynarray_element(
++         &operation->tasks, struct split_task, task_num - 1);
++      if (prev->channel_group == task->channel_group)
++         con0 |= CNA_CBUF_CON0_WEIGHT_REUSE(1);
++   }
+ 
+    /* BSP-order S_POINTER wakes for ALL sub-units MUST come FIRST in the
+     * regcmd (verified by BSP YOLOv5s side-by-side: slots 0-5 of BSP's
+@@ -245,7 +252,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+            CNA_PAD_CON0_PAD_TOP(task->pad_top));
+    EMIT(REG_CNA_FEATURE_DATA_ADDR,
+         rkt_get_tensor(subgraph, operation->input_index)->phys_addr +
+-           task->input_offset);
++           task->input_offset +
++           task->channel_group * operation->input_width *
++              operation->input_height * 32);
+    EMIT(REG_CNA_FC_CON2, 0);
+    /* DMA_CON0: FETCH_PIXEL_LEN (bits 15:8) is the per-surface feature fetch
+     * length. Mesa previously omitted this field, leaving it 0 which causes
+@@ -279,7 +288,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_CNA_DCOMP_CTRL, 0);
+    EMIT(REG_CNA_DCOMP_REGNUM, 0);
+    {
+-      uint32_t weight_pa = rkt_resource(operation->weights)->phys_addr;
++      uint32_t weight_pa = rkt_resource(operation->weights)->phys_addr +
++                           task->channel_group * task->weights_width *
++                              task->weights_height * 32;
+       emit_raw(regs, CNA | 0x1, 0x1110, weight_pa);  /* DCOMP_ADDR0 */
+       emit_raw(regs, CNA | 0x1, 0x1114, 0);          /* DCOMP_ADDR1 */
+       emit_raw(regs, CNA | 0x1, 0x1118, 0);          /* DCOMP_ADDR2 */
+@@ -363,7 +374,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_OFFSET_PEND, 0);
+    EMIT(REG_DPU_DST_BASE_ADDR,
+         rkt_get_tensor(subgraph, operation->output_index)->phys_addr +
+-           task->output_offset);
++           task->output_offset +
++           task->channel_group * operation->output_width *
++              operation->output_height * 32);
+    /* TEST (iav RE, 2026-08-21): the vendor stream carries output_width *
+     * output_height / 2 here, half of what mesa emits, on all 44 convolution
+     * tasks of mobilenet_v1 (checked against the full output tensor, not the
+@@ -607,8 +620,10 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    }
+ 
+    EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(1));
++   /* mesa uses the per-tensor bias-only BS stream: 4 bytes per channel. */
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+-        rkt_resource(operation->biases)->phys_addr);
++        rkt_resource(operation->biases)->phys_addr +
++           task->channel_group * 32 * 4);
+    /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
+     * and is absent from registers.xml, so mesa never writes it.  The vendor
+     * stream in every .rknn writes output_channels - 1 there for all 51 tasks
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 6697b37ac28..a08742f8064 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -14,7 +14,12 @@ calc_entries_per_slice(struct rkt_operation *operation)
+     * against all 51 mobilenet_v1 vendor tasks: entries = W * ceil(C/8) / 4
+     * reproduces every DATA_ENTRIES value (C = 8..512, W = 7..224). */
+    unsigned atomics_per_entry = 4;
+-   unsigned total_c_atomics = DIV_ROUND_UP(operation->input_channels, 8);
++   /* Depthwise with C>32 runs as 32-channel-group tasks -- CBUF holds one
++    * group at a time. */
++   unsigned eff_channels = operation->depthwise
++                              ? MIN2(operation->input_channels, 32)
++                              : operation->input_channels;
++   unsigned total_c_atomics = DIV_ROUND_UP(eff_channels, 8);
+    unsigned last_c_atomics = total_c_atomics % atomics_per_entry;
+    unsigned int_c_entries =
+       (total_c_atomics / atomics_per_entry) * operation->input_width;
+@@ -83,6 +88,12 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+          : align(MAX2(operation->input_channels, FEATURE_ATOMIC_SIZE),
+                  FEATURE_ATOMIC_SIZE);
+    task->input_channels_real = operation->input_channels;
++   /* Depthwise with C>32: each task covers one 32-channel group (vendor
++    * t6..t9 of mobilenet_v1). */
++   if (operation->depthwise && operation->input_channels > 32) {
++      task->input_channels = 32;
++      task->input_channels_real = 32;
++   }
+    task->input_zero_point = operation->input_zero_point;
+    task->input_scale = operation->input_scale;
+ 
+@@ -91,6 +102,10 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+ 
+    task->output_channels_real = operation->output_channels;
+    task->output_channels = align(MAX2(operation->output_channels, 32), 32);
++   if (operation->depthwise && operation->input_channels > 32) {
++      task->output_channels_real = 32;
++      task->output_channels = 32;
++   }
+    /* TEST (iav RE, 2026-08-21): RK3568 wants the real channel count on
+     * depthwise.  The vendor stream carries 32 channels for every 32-channel
+     * depthwise layer of mobilenet_v1 (DPU_DATA_CUBE_CHANNEL 0x001f001f),
+@@ -228,12 +243,27 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+ 
+       util_dynarray_append(&operation->tasks, task);
+ 
++      if (operation->depthwise && operation->input_channels > 32) {
++         unsigned groups = DIV_ROUND_UP(operation->input_channels, 32);
++         for (unsigned g = 1; g < groups; g++) {
++            struct split_task copy = task;
++            copy.channel_group = g;
++            copy.num = g;
++            util_dynarray_append(&operation->tasks, copy);
++         }
++      }
++
+       return;
+    }
+ 
+    struct split_task task = {0};
+    unsigned available_slices =
+       (CBUF_ENTRIES_PER_BANK * available_input_banks) / entries_per_slice;
++   /* TEST: RKT_MAXROWS=N caps the band height -- forces more bands to probe
++    * multi-task pipelines. */
++   if (getenv("RKT_MAXROWS"))
++      available_slices = MIN2(available_slices,
++                              (unsigned)atoi(getenv("RKT_MAXROWS")));
+ 
+    task.num = 0;
+    fill_task(subgraph, operation, &task);
+@@ -374,4 +404,22 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+ 
+       output_height_processed += cur_task->output_height;
+    }
++
++   /* Depthwise with C>32: duplicate every band once per 32-channel group;
++    * rkt_fill_regcmd shifts the buffer addresses by the group index. */
++   if (operation->depthwise && operation->input_channels > 32) {
++      unsigned groups = DIV_ROUND_UP(operation->input_channels, 32);
++      unsigned bands =
++         util_dynarray_num_elements(&operation->tasks, struct split_task);
++      for (unsigned g = 1; g < groups; g++) {
++         for (unsigned b = 0; b < bands; b++) {
++            struct split_task copy = *util_dynarray_element(
++               &operation->tasks, struct split_task, b);
++            copy.channel_group = g;
++            copy.num =
++               util_dynarray_num_elements(&operation->tasks, struct split_task);
++            util_dynarray_append(&operation->tasks, copy);
++         }
++      }
++   }
+ }
+-- 
+2.53.0
+
+
+From 31a7c475b488a76b51556434c3da144a54b247b4 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 22:16:52 +0300
+Subject: [PATCH 20/20] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
+
+Delegate only a window of the plan nodes -- layer-by-layer bisection
+of chained networks on partially-working NPU drivers.
+---
+ src/gallium/frontends/teflon/tfl_device.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/frontends/teflon/tfl_device.c b/src/gallium/frontends/teflon/tfl_device.c
+index 4e680e6e328..fb6354b8112 100644
+--- a/src/gallium/frontends/teflon/tfl_device.c
++++ b/src/gallium/frontends/teflon/tfl_device.c
+@@ -899,6 +899,9 @@ PrepareDelegate(TfLiteContext *tf_context, TfLiteDelegate *tf_delegate)
+          const char *mo = getenv("TEFLON_MAX_OPS");
+          if (mo && i >= atoi(mo))
+             supported = false;
++         const char *mi = getenv("TEFLON_MIN_OPS");
++         if (mi && i < atoi(mi))
++            supported = false;
+       }
+ 
+       teflon_debug("%3d %-15s v%-2d %-11s in:", node_index,
+-- 
+2.53.0
+

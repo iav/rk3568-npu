@@ -1,0 +1,93 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * Experimental overlay: describe the RK3568 NPU (RKNN core) and its IOMMU
+ * so the mainline "rocket" accel driver can probe them.
+ *
+ * Addresses/IRQ taken from the Rockchip vendor 6.1 BSP (rk356x.dtsi),
+ * register-window split (pc/cna/core) modelled on mainline rk3588-base.dtsi.
+ *
+ * Numeric constants (no dt-bindings headers in an out-of-tree overlay):
+ *   ACLK_NPU = 40, HCLK_NPU = 41, CLK_NPU = 35, PCLK_NPU_PRE = 38
+ *   SRST_A_NPU = 43, SRST_H_NPU = 44
+ *   RK3568_PD_NPU = 6
+ *   GIC_SPI = 0, IRQ_TYPE_LEVEL_HIGH = 4, NPU IRQ = 151
+ */
+
+/*
+ * Keep the NPU rail powered from boot: the power domain cannot ack an
+ * idle request while its supply is off, and the rail defaults to its
+ * 0.5 V floor with no consumer. 850 mV is the lowest vendor NPU OPP.
+ */
+&vdd_npu {
+	regulator-min-microvolt = <850000>;
+	regulator-max-microvolt = <1000000>;
+	regulator-always-on;
+	regulator-boot-on;
+};
+
+/*
+ * The mainline pm-domains driver already knows RK3568_PD_NPU, but rk356x-base.dtsi
+ * never describes the domain (no in-tree consumer), so add it here.
+ * ACLK_NPU_PRE = 39, HCLK_NPU_PRE = 37, PCLK_NPU_PRE = 38.
+ */
+&power {
+	power-domain@6 {
+		reg = <6>;
+		clocks = <&cru 39>, <&cru 37>, <&cru 38>;
+		/*
+		 * No pm_qos here on purpose. rockchip_pd_power() reads the QoS
+		 * registers (qos@fe180000) before powering the domain down, and
+		 * those live inside the NPU rail: with vdd_npu still off (the
+		 * RK809 regulator probes ~0.4 s later than the power controller)
+		 * the read takes a synchronous external abort in the genpd
+		 * workqueue, which kills init later on.
+		 */
+		#power-domain-cells = <0>;
+	};
+};
+
+&{/} {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	rknn_mmu_test: iommu@fde4b000 {
+		compatible = "rockchip,rk3568-iommu";
+		reg = <0x0 0xfde4b000 0x0 0x40>;
+		interrupts = <0 151 4>;
+		clocks = <&cru 40>, <&cru 41>;
+		clock-names = "aclk", "iface";
+		/*
+		 * The IOMMU needs the domain reference after all: it is a supplier
+		 * of the NPU device, so pm_runtime_get_suppliers() resumes it while
+		 * probing rocket, and rk_iommu_enable() then touches registers that
+		 * live inside the NPU rail. Without this property the domain is
+		 * still off at that point and the first read takes a synchronous
+		 * external abort. The v1 boot crash came from pm_qos above, not
+		 * from this reference: with no QoS registers to save/restore both
+		 * genpd paths are PMU writes plus an idle-ack wait, which are safe
+		 * even while vdd_npu has not been raised yet.
+		 */
+		power-domains = <&power 6>;
+		#iommu-cells = <0>;
+	};
+
+	rknn_core_test: npu@fde40000 {
+		compatible = "rockchip,rk3568-rknn-core";
+		reg = <0x0 0xfde40000 0x0 0x1000>,
+		      <0x0 0xfde41000 0x0 0x1000>,
+		      <0x0 0xfde43000 0x0 0x1000>;
+		reg-names = "pc", "cna", "core";
+		interrupts = <0 151 4>;
+		clocks = <&cru 40>, <&cru 41>, <&cru 35>, <&cru 38>;
+		clock-names = "aclk", "hclk", "npu", "pclk";
+		assigned-clocks = <&cru 35>;
+		assigned-clock-rates = <200000000>;
+		resets = <&cru 43>, <&cru 44>;
+		reset-names = "srst_a", "srst_h";
+		power-domains = <&power 6>;
+		iommus = <&rknn_mmu_test>;
+		npu-supply = <&vdd_npu>;
+	};
+};
