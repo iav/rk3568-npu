@@ -6,7 +6,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
-#include <drm/rocket_accel.h>
+#include "include/uapi/drm/rocket_accel.h"
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
@@ -105,6 +105,10 @@ fail:
 	return ret;
 }
 
+static int rocket_pc_pulse_keep;
+module_param(rocket_pc_pulse_keep, int, 0644);
+MODULE_PARM_DESC(rocket_pc_pulse_keep, "TEST: keep OP_EN=1 after starting a descriptor chain");
+
 static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *job)
 {
 	unsigned int scale = core->rdev->variant->pc_data_amount_scale;
@@ -156,6 +160,54 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 				readl(core->mmu_iomem + 0x00),
 				readl(core->mmu_iomem + 0x04));
 		}
+	}
+
+	if (job->task_desc_addr) {
+		/* Vendor PC task-DMA mode: the PC unit walks the descriptor
+		 * array itself, configuring the next task into the free
+		 * ping-pong bank while the current one runs.  One submit per
+		 * job; the IRQ handler waits for the task counter to reach
+		 * task_count.  (RK3568: pc_data_amount_scale=1,
+		 * task_number_bits=12, PC_DATA_EXTRA_AMOUNT=4.) */
+		unsigned int extra = 0x10000000 * core->index;
+
+		task = &job->tasks[0];
+		job->next_task_idx = 0;	/* reused as the done-task counter */
+
+		rocket_pc_writel(core, BASE_ADDRESS, 0x1);
+		/* The vendor commit path on RK356x does NOT touch the unit
+		 * S_POINTERs -- the streams carry their own wake words. */
+		(void)extra;
+
+		rocket_pc_writel(core, BASE_ADDRESS, task->regcmd);
+		rocket_pc_writel(core, REGISTER_AMOUNTS,
+				 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT(
+					 DIV_ROUND_UP(task->regcmd_count, scale) - 1));
+		/* Open mask: per-unit interrupts give the thread handler a
+		 * chance to clear DPU done bits between tasks, so back-to-back
+		 * completions in the same ping-pong bank are not merged. */
+		rocket_pc_writel(core, INTERRUPT_MASK, 0x1ffff);
+		rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
+		rocket_pc_writel(core, TASK_CON,
+				 PC_TASK_CON_RESERVED_0(1) |
+				 PC_TASK_CON_TASK_COUNT_CLEAR(1) |
+				 PC_TASK_CON_TASK_PP_EN(1) |
+				 PC_TASK_CON_TASK_NUMBER(job->task_count));
+		/* The vendor runtime submits chains with task_base_addr = 0:
+		 * the hardware never fetches the descriptor array; the chain is
+		 * driven by the 4-word PC tail of each regcmd stream
+		 * ([BASE next][AMOUNTS next][0][OP_EN 0x1f]).  TASK_NUMBER
+		 * above tells the task counter when the chain is done. */
+		rocket_pc_writel(core, TASK_DMA_BASE_ADDR, 0);
+		/* The vendor driver PULSES OP_EN (1 then 0) to start the
+		 * descriptor walker; leaving it at 1 wedges the chain. */
+		rocket_pc_writel(core, OPERATION_ENABLE, PC_OPERATION_ENABLE_OP_EN(1));
+		if (!rocket_pc_pulse_keep)
+			rocket_pc_writel(core, OPERATION_ENABLE, 0);
+
+		dev_dbg(core->dev, "Submitted %d-task descriptor chain at 0x%llx\n",
+			job->task_count, job->task_desc_addr);
+		return;
 	}
 
 	task = &job->tasks[job->next_task_idx];
@@ -403,6 +455,31 @@ static void rocket_job_handle_irq(struct rocket_core *core)
 {
 	pm_runtime_mark_last_busy(core->dev);
 
+	scoped_guard(mutex, &core->job_lock)
+		if (core->in_flight_job && core->in_flight_job->task_desc_addr) {
+			/* PC-chained job: the regcmd tails drive the chain; each
+			 * finished task raises one of the two DPU done bits
+			 * (ping-pong banks).  TASK_STATUS stays 0 on RK3568, so
+			 * count the done BITS, and only clear what we saw --
+			 * a task can finish between the read and the clear. */
+			u32 st = rocket_pc_readl(core, INTERRUPT_RAW_STATUS);
+
+			rocket_pc_writel(core, INTERRUPT_CLEAR, st);
+			dev_dbg(core->dev, "chain irq st=%08x task_status=%08x\n",
+				st, rocket_pc_readl(core, TASK_STATUS));
+			/* Mid-chain tasks only raise CNA/CORE done bits; the DPU
+			 * done arrives once, when the whole chain has drained. */
+			if (!(st & 0x300)) {
+				rocket_pc_writel(core, INTERRUPT_MASK, 0x1ffff);
+				return;
+			}
+			rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
+			dma_fence_signal(core->in_flight_job->done_fence);
+			pm_runtime_put_autosuspend(core->dev);
+			core->in_flight_job = NULL;
+			return;
+		}
+
 	rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
 	rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
 
@@ -461,6 +538,26 @@ static enum drm_gpu_sched_stat rocket_job_timedout(struct drm_sched_job *sched_j
 	struct rocket_core *core = sched_to_core(rdev, sched_job->sched);
 
 	dev_err(core->dev, "NPU job timed out");
+	{
+		u32 pc[0x12];
+		int i;
+
+		for (i = 0; i < 0x12; i++)
+			pc[i] = readl(core->pc_iomem + i * 4);
+		dev_err(core->dev,
+			"PC 00-44: %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			pc[0], pc[1], pc[2], pc[3], pc[4], pc[5], pc[6], pc[7],
+			pc[8], pc[9], pc[10], pc[11], pc[12], pc[13], pc[14],
+			pc[15], pc[16], pc[17]);
+		if (core->top_iomem)
+			dev_err(core->dev, "counters dt_wr=%x dt_rd=%x wt_rd=%x\n",
+				readl(core->top_iomem + 0x34),
+				readl(core->top_iomem + 0x38),
+				readl(core->top_iomem + 0x3c));
+		dev_err(core->dev, "cna_sp=%08x core_sp=%08x\n",
+			rocket_cna_readl(core, S_POINTER),
+			rocket_core_readl(core, S_POINTER));
+	}
 
 	atomic_set(&core->reset.pending, 1);
 	rocket_reset(core, sched_job);
@@ -534,7 +631,9 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 			 "irq raw=0x%08x status=0x%08x task_status=0x%08x\n",
 			 raw_status, rocket_pc_readl(core, INTERRUPT_STATUS),
 			 rocket_pc_readl(core, TASK_STATUS));
-	if ((raw_status & 0x1ffff) && core->dpu_iomem) {
+	/* Legacy stepping only: chained jobs rely on the hardware ping-pong. */
+	if ((raw_status & 0x1ffff) && core->dpu_iomem &&
+	    !(core->in_flight_job && core->in_flight_job->task_desc_addr)) {
 		u32 sp = readl(core->dpu_iomem + 0x4);
 		writel(sp & ~1u, core->dpu_iomem + 0x4); /* bank0 */
 	}
@@ -696,6 +795,8 @@ static int rocket_ioctl_submit_job(struct drm_device *dev, struct drm_file *file
 				 1, NULL, file->client_id);
 	if (ret)
 		goto out_put_job;
+
+	rjob->task_desc_addr = job->task_desc_addr;
 
 	ret = rocket_copy_tasks(dev, file, job, rjob);
 	if (ret)

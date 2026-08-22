@@ -29,6 +29,9 @@ struct rocket_job {
 	struct rocket_task *tasks;
 	u32 task_count;
 	u32 next_task_idx;
+	/* NPU DMA address of the userspace-built PC task-descriptor array
+	 * (vendor 40-byte layout); 0 = legacy one-task stepping. */
+	u64 task_desc_addr;
 
 	/* Fence to be signaled by drm-sched once its done with the job */
 	struct dma_fence *inference_done_fence;

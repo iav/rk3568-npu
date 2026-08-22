@@ -6,3 +6,4 @@ rocket-y := \
 	rocket_drv.o \
 	rocket_gem.o \
 	rocket_job.o
+ccflags-y += -I$(src)/include/uapi

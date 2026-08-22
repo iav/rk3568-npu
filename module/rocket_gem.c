@@ -4,7 +4,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
 #include <drm/drm_utils.h>
-#include <drm/rocket_accel.h>
+#include "include/uapi/drm/rocket_accel.h"
 #include <linux/dma-mapping.h>
 #include <linux/iommu.h>
 

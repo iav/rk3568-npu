@@ -5,7 +5,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_ioctl.h>
-#include <drm/rocket_accel.h>
+#include "include/uapi/drm/rocket_accel.h"
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/iommu.h>
