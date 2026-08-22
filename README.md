@@ -8,22 +8,23 @@ runtime.
 Status (2026-08-22):
 
 - single-convolution probe layers (regular, depthwise, stride-2,
-  3-channel first layer) match the TFLite CPU reference within 1 LSB
-  across uniform fills, row/column gradients, channel-coded and mixed
-  inputs;
-- mobilenet_v1 (224×224 quant) runs its 27 convolutions on the NPU:
-  87 ms vs 117 ms CPU-only on the same board, mean absolute logit
-  difference 0.11, 4 of the top-5 classes match;
-- the final 1024→1001 convolution, avgpool and softmax stay on the CPU
-  (the FC-shaped layer needs a separate hardware mode, not implemented).
+  3-channel first layer, FC-shaped final layer) match the TFLite CPU
+  reference within 1 LSB across uniform fills, row/column gradients,
+  channel-coded and mixed inputs;
+- full mobilenet_v1 (224×224 quant) runs on the NPU: 9 ms vs 117 ms
+  CPU-only on the same board, top-5 identical to the CPU reference
+  including order, bit-identical results across repeated runs;
+- the task chain is driven by the NPU's PC unit in hardware (the vendor
+  driver's submit model); avgpool and softmax stay on the CPU.
 
 RK3568 differs from the RK3588 path already in Mesa. The differences,
 derived by byte-level comparison against captured vendor command
 streams, are described in the Mesa commit messages (see below): 8-channel
 feature atomics (all CNA/DPU strides in 8-byte units), 8×32 KiB CBUF
 banks, a different weight layout (16-kernel tap-major groups), 32-channel
-group tasks for wide depthwise, a packed-RGB first-layer mode, and the
-DPU BS-stream requantization.
+group tasks for wide depthwise, a packed-RGB first-layer mode, weight
+streaming for FC-shaped layers, PC-driven task chaining, and the DPU
+BS-stream requantization.
 
 ## Components
 
@@ -109,12 +110,9 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
 
 ## Known limitations
 
-- FC-shaped convolutions (weights over 224 KiB of CBUF) are not
-  delegated; the vendor fp16 FC mode is unimplemented.
 - Residual ±1-per-layer rounding drift (u16 multiplier vs the CPU's
   int32 requant path).
-- Occasional configuration glitches on long task chains are still being
-  investigated; the wedge workaround in the module masks most of them.
+- avgpool and softmax are not delegated.
 - Only convolution/depthwise (+fused ReLU6 via output saturation) and
   quantized uint8 tensors; per-axis weight quantization is untested.
 
