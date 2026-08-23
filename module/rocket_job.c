@@ -109,6 +109,29 @@ static int rocket_pc_pulse_keep;
 module_param(rocket_pc_pulse_keep, int, 0644);
 MODULE_PARM_DESC(rocket_pc_pulse_keep, "TEST: keep OP_EN=1 after starting a descriptor chain");
 
+/* Reset the core AND re-arm the NPU MMU.  reset_control wipes the MMU
+ * behind rk_iommu's back (rk_iommu re-programs the DTE only on runtime
+ * resume), so a bare rocket_core_reset() leaves every following DMA
+ * pointing into the void.  rk_iommu commands: 2 stall, 4 ZAP_CACHE,
+ * 0 ENABLE_PAGING, 3 unstall. */
+static void rocket_core_reset_rearm(struct rocket_core *core)
+{
+	u32 dte = core->mmu_iomem ? readl(core->mmu_iomem + 0x00) : 0;
+
+	rocket_core_reset(core);
+	if (core->mmu_iomem && dte) {
+		writel(2, core->mmu_iomem + 0x08);
+		writel(dte, core->mmu_iomem + 0x00);
+		writel(4, core->mmu_iomem + 0x08);
+		writel(3, core->mmu_iomem + 0x1c);	/* INT_MASK */
+		writel(0, core->mmu_iomem + 0x08);
+		writel(3, core->mmu_iomem + 0x08);
+		dev_dbg(core->dev, "core reset, mmu re-armed dte=%08x status=%08x\n",
+			readl(core->mmu_iomem + 0x00),
+			readl(core->mmu_iomem + 0x04));
+	}
+}
+
 static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *job)
 {
 	unsigned int scale = core->rdev->variant->pc_data_amount_scale;
@@ -142,25 +165,8 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 	 * (rk_iommu re-programs the DTE only on runtime resume).
 	 * rk_iommu commands: 1 ENABLE_PAGING, 6 FORCE_RESET, 8 ZAP_CACHE. */
 	if (core->mmu_iomem && !job->task_desc_addr &&
-	    (rocket_cna_readl(core, S_POINTER) & BIT(16))) {
-		u32 dte = readl(core->mmu_iomem + 0x00);
-
-		rocket_core_reset(core);
-		if (dte) {
-			/* rk_iommu_enable(): stall(2), DTE, zap(4), unmask,
-			 * ENABLE_PAGING(0), unstall(3). */
-			writel(2, core->mmu_iomem + 0x08);
-			writel(dte, core->mmu_iomem + 0x00);
-			writel(4, core->mmu_iomem + 0x08);
-			writel(3, core->mmu_iomem + 0x1c);	/* INT_MASK */
-			writel(0, core->mmu_iomem + 0x08);
-			writel(3, core->mmu_iomem + 0x08);
-			dev_dbg(core->dev,
-				"TEST F: core reset, mmu re-armed dte=%08x status=%08x\n",
-				readl(core->mmu_iomem + 0x00),
-				readl(core->mmu_iomem + 0x04));
-		}
-	}
+	    (rocket_cna_readl(core, S_POINTER) & BIT(16)))
+		rocket_core_reset_rearm(core);
 
 	if (job->task_desc_addr) {
 		/* Vendor PC task-DMA mode: the PC unit walks the descriptor
@@ -521,8 +527,10 @@ rocket_reset(struct rocket_core *core, struct drm_sched_job *bad)
 		core->in_flight_job = NULL;
 	}
 
-	/* Proceed with reset now. */
-	rocket_core_reset(core);
+	/* Proceed with reset now.  Re-arm the MMU too: a bare core reset
+	 * leaves the NPU MMU disabled and every following job DMAs into the
+	 * void (observed as an endless timeout series after one bad job). */
+	rocket_core_reset_rearm(core);
 
 	/* NPU has been reset, we can clear the reset pending bit. */
 	atomic_set(&core->reset.pending, 0);
