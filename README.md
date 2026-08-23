@@ -11,11 +11,13 @@ Status (2026-08-22):
   3-channel first layer, FC-shaped final layer) match the TFLite CPU
   reference within 1 LSB across uniform fills, row/column gradients,
   channel-coded and mixed inputs;
-- full mobilenet_v1 (224×224 quant) runs on the NPU: 9 ms vs 117 ms
-  CPU-only on the same board, top-5 identical to the CPU reference
-  including order, bit-identical results across repeated runs;
+- full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
+  depthwise, the FC-shaped final layer and average pooling: 9 ms vs
+  117 ms CPU-only on the same board, top-5 identical to the CPU
+  reference, mean absolute logit difference 0.03, bit-identical results
+  across repeated runs;
 - the task chain is driven by the NPU's PC unit in hardware (the vendor
-  driver's submit model); avgpool and softmax stay on the CPU.
+  driver's submit model); only reshape and softmax stay on the CPU.
 
 RK3568 differs from the RK3588 path already in Mesa. The differences,
 derived by byte-level comparison against captured vendor command
@@ -110,9 +112,11 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
 
 ## Known limitations
 
-- Residual ±1-per-layer rounding drift (u16 multiplier vs the CPU's
-  int32 requant path).
-- avgpool and softmax are not delegated.
+- Residual ±1-per-layer rounding drift (the 15-bit OUT_CVT scale and
+  the hardware rounding pipeline vs the CPU's int32 requant path; see
+  the commit log for the precision-ceiling experiments).
+- Average pooling is delegated for zero-padding cases only; softmax and
+  reshape are not delegated.
 - Only convolution/depthwise (+fused ReLU6 via output saturation) and
   quantized uint8 tensors; per-axis weight quantization is untested.
 
