@@ -5,7 +5,7 @@ components: the mainline `accel/rocket` kernel driver (with local fixes)
 and a Mesa Teflon (TFLite delegate) branch. No librknnrt, no vendor
 runtime.
 
-Status (2026-08-22):
+Status (2026-08-23):
 
 - single-convolution probe layers (regular, depthwise, stride-2,
   3-channel first layer, FC-shaped final layer) match the TFLite CPU
@@ -13,9 +13,15 @@ Status (2026-08-22):
   channel-coded and mixed inputs;
 - full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
   depthwise, the FC-shaped final layer and average pooling: 9 ms vs
-  117 ms CPU-only on the same board, top-5 identical to the CPU
+  117 ms CPU-only on the same board, top-5 matching the CPU
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
+- full mobilenet_v2 (224×224 quant) runs on the NPU as well, including
+  the fused residual additions: 15 ms vs 76 ms CPU-only, top-1 and
+  top-5 set matching the CPU reference, mean absolute logit difference
+  0.98, bit-identical across runs (one of the ten adds — the only one
+  with a channel count not divisible by 32 — currently stays on the
+  CPU, see limitations);
 - the task chain is driven by the NPU's PC unit in hardware (the vendor
   driver's submit model); only reshape and softmax stay on the CPU.
 
@@ -23,10 +29,13 @@ RK3568 differs from the RK3588 path already in Mesa. The differences,
 derived by byte-level comparison against captured vendor command
 streams, are described in the Mesa commit messages (see below): 8-channel
 feature atomics (all CNA/DPU strides in 8-byte units), 8×32 KiB CBUF
-banks, a different weight layout (16-kernel tap-major groups), 32-channel
-group tasks for wide depthwise, a packed-RGB first-layer mode, weight
-streaming for FC-shaped layers, PC-driven task chaining, and the DPU
-BS-stream requantization.
+banks, a different weight layout (16-kernel tap-major groups with
+compact tails for partial input-channel slices and kernel groups),
+32-channel group tasks for wide depthwise, a packed-RGB first-layer
+mode, weight streaming for FC-shaped layers, PC-driven task chaining,
+the DPU BS-stream requantization, a FEATURE_GRAINS prefetch formula
+that grows on narrow feature maps, and the element-wise (residual add)
+unit configuration taken from a vendor resnet18 capture.
 
 ## Components
 
@@ -104,7 +113,8 @@ python tests/mob.py                                 # mobilenet_v1 CPU vs NPU
 `suite.py` prints `max/mean` absolute difference against the CPU
 reference for 7 input patterns; every bundled probe layer should show
 max ≤ 1. `mob.py` needs `mobilenet_v1_1.0_224_quant.tflite` (the classic
-TFLite hosted model).
+TFLite hosted model); point it at another model with
+`MOBILENET=<path>` — `mobilenet_v2_1.0_224_quant.tflite` works too.
 
 Debug knobs: `TEFLON_MAX_OPS`/`TEFLON_MIN_OPS` (delegate a window of graph
 nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
@@ -117,8 +127,12 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
   the commit log for the precision-ceiling experiments).
 - Average pooling is delegated for zero-padding cases only; softmax and
   reshape are not delegated.
-- Only convolution/depthwise (+fused ReLU6 via output saturation) and
-  quantized uint8 tensors; per-axis weight quantization is untested.
+- Residual additions whose channel count is not divisible by 32 stay on
+  the CPU (the EW RDMA reads the last surface pair of the second input
+  incorrectly there; not solved yet). In mobilenet_v2 this affects a
+  single op out of 65.
+- Only convolution/depthwise/add (+fused ReLU6 via output saturation)
+  and quantized uint8 tensors; per-axis weight quantization is untested.
 
 ## References
 
