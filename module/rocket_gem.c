@@ -7,6 +7,7 @@
 #include "include/uapi/drm/rocket_accel.h"
 #include <linux/dma-mapping.h>
 #include <linux/iommu.h>
+#include <linux/pagemap.h>
 
 #include "rocket_drv.h"
 #include "rocket_gem.h"
@@ -73,6 +74,15 @@ int rocket_ioctl_create_bo(struct drm_device *dev, void *data, struct drm_file *
 
 	gem_obj = &shmem_obj->base;
 	rkt_obj = to_rocket_bo(gem_obj);
+
+	/* RK3568 (RE 2026-08-21, RE-LOG Test 18): the NPU's DMA masters fail
+	 * to fetch from physical addresses above 4 GiB even through a valid
+	 * IOMMU mapping (PC DMA_READ_ERROR, CNA never starts).  Keep BO pages
+	 * in the DMA32 zone, like etnaviv does for addressing-limited GPUs.
+	 * Must happen before drm_gem_shmem_get_pages_sgt() allocates them. */
+	mapping_set_gfp_mask(gem_obj->filp->f_mapping,
+			     GFP_USER | __GFP_DMA32 |
+			     __GFP_RETRY_MAYFAIL | __GFP_NOWARN);
 
 	rkt_obj->driver_priv = rocket_priv;
 	rkt_obj->domain = rocket_iommu_domain_get(rocket_priv);
