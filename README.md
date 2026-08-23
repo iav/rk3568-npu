@@ -17,11 +17,9 @@ Status (2026-08-23):
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
 - full mobilenet_v2 (224×224 quant) runs on the NPU as well, including
-  the fused residual additions: 15 ms vs 76 ms CPU-only, top-1 and
-  top-5 set matching the CPU reference, mean absolute logit difference
-  0.98, bit-identical across runs (one of the ten adds — the only one
-  with a channel count not divisible by 32 — currently stays on the
-  CPU, see limitations);
+  all ten fused residual additions: 14 ms vs 76 ms CPU-only, top-5
+  matching the CPU reference including order, mean absolute logit
+  difference 0.82, bit-identical across runs;
 - the task chain is driven by the NPU's PC unit in hardware (the vendor
   driver's submit model); only reshape and softmax stay on the CPU.
 
@@ -35,7 +33,9 @@ compact tails for partial input-channel slices and kernel groups),
 mode, weight streaming for FC-shaped layers, PC-driven task chaining,
 the DPU BS-stream requantization, a FEATURE_GRAINS prefetch formula
 that grows on narrow feature maps, and the element-wise (residual add)
-unit configuration taken from a vendor resnet18 capture.
+unit configuration — including the RDMA surface-notch addressing that
+band-split add tasks need — taken from vendor resnet18 and probe-model
+captures.
 
 ## Components
 
@@ -127,10 +127,6 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
   the commit log for the precision-ceiling experiments).
 - Average pooling is delegated for zero-padding cases only; softmax and
   reshape are not delegated.
-- Residual additions whose channel count is not divisible by 32 stay on
-  the CPU (the EW RDMA reads the last surface pair of the second input
-  incorrectly there; not solved yet). In mobilenet_v2 this affects a
-  single op out of 65.
 - Only convolution/depthwise/add (+fused ReLU6 via output saturation)
   and quantized uint8 tensors; per-axis weight quantization is untested.
 
