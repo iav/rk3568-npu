@@ -59,17 +59,20 @@ Hardware: ODROID-M1. Tested with 8 GB RAM.
 ### 1. Kernel
 
 Armbian `bleedingedge` rockchip64 kernel 7.2-rc7 (the exact .deb set used
-is attached to the GitHub release of this repo). Two boot requirements in
+is attached to the GitHub release of this repo). Boot requirements in
 `/boot/armbianEnv.txt`:
 
 ```
-extraargs=cma=256M mem=4G
+extraargs=cma=256M
 user_overlays=rk3568-npu-test
 ```
 
-`mem=4G` matters: the NPU/IOMMU cannot reach page tables above 4 GB (the
-same limitation is handled with a GFP_DMA32 patch in the vendor-stack
-setup, see the links below).
+The NPU cannot reach physical memory above 4 GiB. Two patches cover this:
+page tables are constrained by a GFP_DMA32 patch already included in the
+released kernel .debs (`iommu_data_ops_v2` in `rockchip-iommu.c`), and BO
+pages by a DMA32 gfp mask in `module/rocket_gem.c`. With both in place
+the full 8 GB stays usable. If you run an unpatched module, add `mem=4G`
+to `extraargs` instead — otherwise jobs die with `DMA_READ_ERROR`.
 
 Build and install the overlay:
 
