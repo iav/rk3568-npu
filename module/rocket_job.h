@@ -32,6 +32,11 @@ struct rocket_job {
 	/* NPU DMA address of the userspace-built PC task-descriptor array
 	 * (vendor 40-byte layout); 0 = legacy one-task stepping. */
 	u64 task_desc_addr;
+	/* Interrupt mask of the last task in the chain (0x300 convolution,
+	 * 0xc00 PPU pool): the PC applies per-task masks from the
+	 * descriptor array, so the one interrupt that reaches the CPU is
+	 * the last task's. */
+	u32 last_int_mask;
 
 	/* Fence to be signaled by drm-sched once its done with the job */
 	struct dma_fence *inference_done_fence;
