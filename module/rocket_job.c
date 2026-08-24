@@ -109,6 +109,14 @@ static int rocket_pc_pulse_keep;
 module_param(rocket_pc_pulse_keep, int, 0644);
 MODULE_PARM_DESC(rocket_pc_pulse_keep, "TEST: keep OP_EN=1 after starting a descriptor chain");
 
+static int rocket_open_mask;
+module_param(rocket_open_mask, int, 0644);
+MODULE_PARM_DESC(rocket_open_mask, "TEST: unmask all interrupts (0x1ffff) on chained jobs to log every unit's done bits");
+
+static int rocket_desc_walk;
+module_param(rocket_desc_walk, int, 0644);
+MODULE_PARM_DESC(rocket_desc_walk, "TEST: program TASK_DMA_BASE_ADDR so the PC walks the task-descriptor array (vendor mode)");
+
 /* Reset the core AND re-arm the NPU MMU.  reset_control wipes the MMU
  * behind rk_iommu's back (rk_iommu re-programs the DTE only on runtime
  * resume), so a bare rocket_core_reset() leaves every following DMA
@@ -189,24 +197,36 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 		rocket_pc_writel(core, REGISTER_AMOUNTS,
 				 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT(
 					 DIV_ROUND_UP(task->regcmd_count, scale) - 1));
-		/* Open mask: per-unit interrupts give the thread handler a
-		 * chance to clear DPU done bits between tasks, so back-to-back
-		 * completions in the same ping-pong bank are not merged. */
-		rocket_pc_writel(core, INTERRUPT_MASK, 0x1ffff);
+		/* Vendor scheme (rknpu_job_subcore_commit_pc): unmask ONLY
+		 * the last task's interrupt -- the PC applies the per-task
+		 * masks from the descriptor array while walking the chain,
+		 * and the CPU sees a single interrupt at the end.  An open
+		 * 0x1ffff mask storms on bit 16 during the descriptor walk. */
+		rocket_pc_writel(core, INTERRUPT_MASK,
+				 rocket_open_mask ? 0x1ffff : job->last_int_mask);
 		rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
 		rocket_pc_writel(core, TASK_CON,
 				 PC_TASK_CON_RESERVED_0(1) |
 				 PC_TASK_CON_TASK_COUNT_CLEAR(1) |
 				 PC_TASK_CON_TASK_PP_EN(1) |
 				 PC_TASK_CON_TASK_NUMBER(job->task_count));
-		/* The vendor runtime submits chains with task_base_addr = 0:
-		 * the hardware never fetches the descriptor array; the chain is
-		 * driven by the 4-word PC tail of each regcmd stream
-		 * ([BASE next][AMOUNTS next][0][OP_EN 0x1f]).  TASK_NUMBER
-		 * above tells the task counter when the chain is done. */
-		rocket_pc_writel(core, TASK_DMA_BASE_ADDR, 0);
-		/* The vendor driver PULSES OP_EN (1 then 0) to start the
-		 * descriptor walker; leaving it at 1 wedges the chain. */
+		/* The 4-word PC tails drive the regcmd chain, but the PC also
+		 * fetches the 40-byte task-descriptor array: per-task int_mask
+		 * there is how it learns that a PPU pool task completes on the
+		 * 0xc00 bits instead of the DPU 0x300 -- without it the chain
+		 * stalls after a pool chunk (homogeneous convolution chains
+		 * happen to work with base 0, which the earlier capture showed).
+		 * RKT_DESC_BASE0=1 in the environment of the *kernel* is not a
+		 * thing; flip this line for experiments. */
+		/* Descriptor walk (vendor mode): the PC fetches the 40-byte
+		 * task descriptors itself and honors their per-task
+		 * enable_mask/int_mask -- required for heterogeneous chains
+		 * (PPU pool tasks).  base 0 keeps the tails-only mode. */
+		rocket_pc_writel(core, TASK_DMA_BASE_ADDR,
+				 rocket_desc_walk ?
+					 lower_32_bits(job->task_desc_addr) : 0);
+		/* Pulse OP_EN (1 then 0) to start the walker; leaving it at 1
+		 * wedges the chain. */
 		rocket_pc_writel(core, OPERATION_ENABLE, PC_OPERATION_ENABLE_OP_EN(1));
 		if (!rocket_pc_pulse_keep)
 			rocket_pc_writel(core, OPERATION_ENABLE, 0);
@@ -473,10 +493,14 @@ static void rocket_job_handle_irq(struct rocket_core *core)
 			rocket_pc_writel(core, INTERRUPT_CLEAR, st);
 			dev_dbg(core->dev, "chain irq st=%08x task_status=%08x\n",
 				st, rocket_pc_readl(core, TASK_STATUS));
-			/* Mid-chain tasks only raise CNA/CORE done bits; the DPU
-			 * done arrives once, when the whole chain has drained. */
-			if (!(st & 0x300)) {
-				rocket_pc_writel(core, INTERRUPT_MASK, 0x1ffff);
+			/* Vendor scheme: the single unmasked interrupt is the
+			 * last task's (per-task masks come from the descriptor
+			 * array while the PC walks the chain). */
+			if (!(st & core->in_flight_job->last_int_mask)) {
+				rocket_pc_writel(core, INTERRUPT_MASK,
+						 rocket_open_mask ?
+							 0x1ffff :
+							 core->in_flight_job->last_int_mask);
 				return;
 			}
 			rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
@@ -668,8 +692,12 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 		return IRQ_NONE;
 	}
 
+	/* Wake the thread on DPU done (0x300), PPU done candidates (0xc00)
+	 * and bit 16 (storms in pool chains with an open mask -- possibly
+	 * the RK3568 PPU done) -- a chained job whose last task is a PPU
+	 * pool completes on one of these. */
 	if (!(raw_status & (PC_INTERRUPT_RAW_STATUS_DPU_0 |
-			    PC_INTERRUPT_RAW_STATUS_DPU_1))) {
+			    PC_INTERRUPT_RAW_STATUS_DPU_1 | 0xc00 | 0x10000))) {
 		rocket_pc_writel(core, INTERRUPT_CLEAR, raw_status & 0x1ffff);
 		pm_runtime_put(core->dev);
 		return IRQ_HANDLED;
@@ -805,6 +833,7 @@ static int rocket_ioctl_submit_job(struct drm_device *dev, struct drm_file *file
 		goto out_put_job;
 
 	rjob->task_desc_addr = job->task_desc_addr;
+	rjob->last_int_mask = job->last_int_mask ?: 0x300;
 
 	ret = rocket_copy_tasks(dev, file, job, rjob);
 	if (ret)
