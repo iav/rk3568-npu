@@ -5,7 +5,7 @@
 #ifndef __DRM_UAPI_ROCKET_ACCEL_H__
 #define __DRM_UAPI_ROCKET_ACCEL_H__
 
-#include "drm/drm.h"
+#include <drm/drm.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -164,6 +164,20 @@ struct drm_rocket_job {
 	 * one-task-at-a-time stepping.
 	 */
 	__u64 task_desc_addr;
+
+	/**
+	 * @last_int_mask: Input: For chained jobs, the interrupt mask of the
+	 * LAST task (0x300 for convolutions, 0xc00 for PPU pool tasks).  The
+	 * PC applies the per-task masks from the descriptor array itself, so
+	 * the CPU sees exactly one interrupt, when the last task finishes.
+	 * Zero means 0x300.
+	 */
+	__u32 last_int_mask;
+
+	/**
+	 * @pad: Reserved, must be zero.
+	 */
+	__u32 pad;
 };
 
 /**
