@@ -5,23 +5,32 @@ components: the mainline `accel/rocket` kernel driver (with local fixes)
 and a Mesa Teflon (TFLite delegate) branch. No librknnrt, no vendor
 runtime.
 
-Status (2026-08-23):
+Status (2026-08-24):
 
 - single-convolution probe layers (regular, depthwise, stride-2,
   3-channel first layer, FC-shaped final layer) match the TFLite CPU
   reference within 1 LSB across uniform fills, row/column gradients,
   channel-coded and mixed inputs;
 - full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
-  depthwise, the FC-shaped final layer and average pooling: 9 ms vs
+  depthwise, the FC-shaped final layer and average pooling: 6–7 ms vs
   117 ms CPU-only on the same board, top-5 matching the CPU
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
-- full mobilenet_v2 (224×224 quant) runs on the NPU as well, including
-  all ten fused residual additions: 14 ms vs 76 ms CPU-only, top-5
+- full mobilenet_v2 (224×224 quant) runs as well, including all ten
+  fused residual additions: 7 ms vs 76 ms CPU-only (~11×), top-5
   matching the CPU reference including order, mean absolute logit
   difference 0.82, bit-identical across runs;
-- the task chain is driven by the NPU's PC unit in hardware (the vendor
-  driver's submit model); only reshape and softmax stay on the CPU.
+- resnet18 (224×224 quant) runs end-to-end in a single NPU partition —
+  convolutions, residual adds and both poolings: 13 ms vs 345 ms
+  CPU-only (~27×), max pooling and global average pooling executed by
+  the NPU's dedicated PPU unit;
+- the whole delegated graph is submitted as ONE job: every task's
+  command-stream tail is patched to chain into the next one and the
+  NPU's PC unit walks the chain in hardware, raising a single interrupt
+  at the end (the vendor driver's submit model; per-job overhead is
+  ~0.2 ms, which is where most of the mobilenet speedup over the
+  earlier per-task submit came from);
+- only reshape and softmax stay on the CPU.
 
 RK3568 differs from the RK3588 path already in Mesa. The differences,
 derived by byte-level comparison against captured vendor command
@@ -32,10 +41,15 @@ compact tails for partial input-channel slices and kernel groups),
 32-channel group tasks for wide depthwise, a packed-RGB first-layer
 mode, weight streaming for FC-shaped layers, PC-driven task chaining,
 the DPU BS-stream requantization, a FEATURE_GRAINS prefetch formula
-that grows on narrow feature maps, and the element-wise (residual add)
+that grows on narrow feature maps, the element-wise (residual add)
 unit configuration — including the RDMA surface-notch addressing that
-band-split add tasks need — taken from vendor resnet18 and probe-model
-captures.
+band-split add tasks need — and the PPU/PPU_RDMA pooling programming
+(max and average), all taken from vendor resnet18 and probe-model
+captures. Two PPU pitfalls worth writing down: the PPU register chunk
+must live in the same BO as the preceding task's command stream, and
+POOLING_PADDING_CFG (0x6040) carries all four paddings — a pooling
+window not covered by input+padding starves the unit forever and
+stalls the whole PC chain.
 
 ## Components
 
@@ -95,6 +109,16 @@ sudo rmmod rocket && sudo insmod ./rocket.ko
 
 `/dev/accel/accel0` should appear.
 
+Note: if the kernel already auto-loads a `rocket` module from
+`/lib/modules`, replace that copy and run `depmod` — an `insmod` next to
+a loaded stale build silently keeps the old code. `rmmod` only while the
+NPU is runtime-suspended.
+
+The module and the Mesa branch extend the uapi together (a
+`last_int_mask` field in `struct drm_rocket_job` for the
+single-interrupt chained submit) — build them from matching revisions
+of this repo and the branch below.
+
 ### 3. Mesa / Teflon
 
 ```
@@ -128,10 +152,15 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
 - Residual ±1-per-layer rounding drift (the 15-bit OUT_CVT scale and
   the hardware rounding pipeline vs the CPU's int32 requant path; see
   the commit log for the precision-ceiling experiments).
-- Average pooling is delegated for zero-padding cases only; softmax and
-  reshape are not delegated.
-- Only convolution/depthwise/add (+fused ReLU6 via output saturation)
-  and quantized uint8 tensors; per-axis weight quantization is untested.
+- PPU pooling covers kernels ≤ 8, equal x/y strides ≤ 8 and equal
+  input/output quantization; other average poolings fall back to a
+  depthwise-convolution lowering (zero-padding cases only). Softmax,
+  reshape, concatenation and FULLY_CONNECTED are not delegated.
+- Only convolution/depthwise/add/pooling (+fused ReLU6 via output
+  saturation) and quantized uint8 tensors; per-axis weight quantization
+  is untested.
+- Debug/rollback knobs: `RKT_NO_CHAIN=1` (per-task submit),
+  `RKT_NO_PPU=1` (pooling on CPU / dw-conv path).
 
 ## References
 
