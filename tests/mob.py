@@ -1,6 +1,9 @@
 import os
 import numpy as np
-import tflite_runtime.interpreter as tflite
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    from ai_edge_litert import interpreter as tflite
 M=os.environ.get("MOBILENET","mobilenet_v1_1.0_224_quant.tflite")
 def mk(mode):
     d=[tflite.load_delegate(os.environ.get("TEFLON_PATH","./mesa/build/src/gallium/targets/teflon/libteflon.so"))] if mode=="npu" else []

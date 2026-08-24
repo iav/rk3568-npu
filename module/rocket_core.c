@@ -7,6 +7,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/iommu.h>
+#include <linux/moduleparam.h>
 #include <linux/of.h>
 #include <linux/of_clk.h>
 #include <linux/platform_device.h>
@@ -18,6 +19,13 @@
 #include "rocket_drv.h"
 #include "rocket_device.h"
 #include "rocket_job.h"
+
+/* MAC-array clock (TF-A PVTPLL via SCMI id 2).  The vendor OPP table for
+ * this rail runs to 1 GHz; 800 MHz is what the vendor DT assigns on
+ * RK3568 (rk3568-rknpu-vendor.dts) at the same 0.85-0.9 V supply. */
+static unsigned long rocket_scmi_rate = 800000000;
+module_param_named(scmi_rate, rocket_scmi_rate, ulong, 0444);
+MODULE_PARM_DESC(scmi_rate, "NPU SCMI/PVTPLL clock rate in Hz (default 800000000)");
 
 int rocket_core_init(struct rocket_core *core)
 {
@@ -104,7 +112,7 @@ int rocket_core_init(struct rocket_core *core)
 			of_node_put(clkspec.np);
 			if (!IS_ERR(scmi_clk)) {
 				int cerr = clk_prepare_enable(scmi_clk);
-				int rerr = clk_set_rate(scmi_clk, 600000000);
+				int rerr = clk_set_rate(scmi_clk, rocket_scmi_rate);
 
 				dev_info(dev,
 					 "TEST scmi npu clk: enable=%d set_rate=%d rate=%lu\n",

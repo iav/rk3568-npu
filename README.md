@@ -12,25 +12,33 @@ Status (2026-08-24):
   reference within 1 LSB across uniform fills, row/column gradients,
   channel-coded and mixed inputs;
 - full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
-  depthwise, the FC-shaped final layer and average pooling: 6–7 ms vs
-  117 ms CPU-only on the same board, top-5 matching the CPU
+  depthwise, the FC-shaped final layer and average pooling: ~6 ms vs
+  116 ms CPU-only on the same board, top-5 matching the CPU
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
 - full mobilenet_v2 (224×224 quant) runs as well, including all ten
-  fused residual additions: 7 ms vs 76 ms CPU-only (~11×), top-5
+  fused residual additions: ~7 ms vs 78 ms CPU-only (~11×), top-5
   matching the CPU reference including order, mean absolute logit
   difference 0.82, bit-identical across runs;
 - resnet18 (224×224 quant) runs end-to-end in a single NPU partition —
-  convolutions, residual adds and both poolings: 13 ms vs 345 ms
-  CPU-only (~27×), max pooling and global average pooling executed by
-  the NPU's dedicated PPU unit;
+  convolutions, residual adds, both poolings and the final
+  FULLY_CONNECTED layer: ~12 ms vs 344 ms CPU-only (~28×), max pooling
+  and global average pooling executed by the NPU's dedicated PPU unit;
+- channel CONCATENATION is delegated as pure addressing (each input's
+  producer writes its own slice of the output buffer), with an identity
+  convolution copy as the fallback when a leg cannot be written in
+  place;
+- the MAC array runs at 800 MHz (the vendor's own RK3568 operating
+  point; the driver default used to be 600 MHz — see the `scmi_rate`
+  module parameter below), stress-tested for an hour with bit-identical
+  outputs throughout;
 - the whole delegated graph is submitted as ONE job: every task's
   command-stream tail is patched to chain into the next one and the
   NPU's PC unit walks the chain in hardware, raising a single interrupt
   at the end (the vendor driver's submit model; per-job overhead is
   ~0.2 ms, which is where most of the mobilenet speedup over the
   earlier per-task submit came from);
-- only reshape and softmax stay on the CPU.
+- for all three networks only reshape and softmax stay on the CPU.
 
 RK3568 differs from the RK3588 path already in Mesa. The differences,
 derived by byte-level comparison against captured vendor command
@@ -50,6 +58,15 @@ must live in the same BO as the preceding task's command stream, and
 POOLING_PADDING_CFG (0x6040) carries all four paddings — a pooling
 window not covered by input+padding starves the unit forever and
 stalls the whole PC chain.
+
+Three more hard-won conventions from the later sessions: CBUF entry
+accounting follows the DECLARED channel count (align 32), so a
+depthwise task with C < 32 both declares and pads to a 32-channel
+group; the PPU input cube must be clipped to the rows/columns actually
+consumed, or the window starves; and the axis convention is
+width = dims[2] (the contiguous memory row) — the driver used to mix
+the two spatial axes, which was self-consistent only on square feature
+maps and corrupted every non-square one.
 
 ## Components
 
@@ -119,6 +136,12 @@ The module and the Mesa branch extend the uapi together (a
 single-interrupt chained submit) — build them from matching revisions
 of this repo and the branch below.
 
+The MAC-array clock (TF-A PVTPLL via SCMI) defaults to 800 MHz, the
+vendor DT's RK3568 operating point at the same 0.85–0.9 V NPU supply.
+`scmi_rate=<Hz>` on the module command line overrides it (600 MHz was
+the old hardcoded value; the speedup at 800 is ~10%, the bottleneck at
+this point is CPU-side tensor packing).
+
 ### 3. Mesa / Teflon
 
 ```
@@ -154,11 +177,16 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
   the commit log for the precision-ceiling experiments).
 - PPU pooling covers kernels ≤ 8, equal x/y strides ≤ 8 and equal
   input/output quantization; other average poolings fall back to a
-  depthwise-convolution lowering (zero-padding cases only). Softmax,
-  reshape, concatenation and FULLY_CONNECTED are not delegated.
-- Only convolution/depthwise/add/pooling (+fused ReLU6 via output
-  saturation) and quantized uint8 tensors; per-axis weight quantization
-  is untested.
+  depthwise-convolution lowering (zero-padding cases only). A max pool
+  with no preceding NPU operation to host its PPU chunk gets an
+  identity-copy carrier inserted (exact copy, one extra task).
+- Concatenation is delegated for axis -1 (channels), equal spatial
+  dims, and every leg but the last a multiple of 16 channels; a graph
+  with an unsupported concat keeps the whole partition off the NPU.
+- Softmax and reshape are not delegated.
+- Only convolution/depthwise/add/pooling/concat/fully-connected
+  (+fused ReLU6 via output saturation) and quantized uint8 tensors;
+  per-axis weight quantization is untested.
 - Debug/rollback knobs: `RKT_NO_CHAIN=1` (per-task submit),
   `RKT_NO_PPU=1` (pooling on CPU / dw-conv path).
 
