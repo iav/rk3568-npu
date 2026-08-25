@@ -1,7 +1,7 @@
 From b79779acc5f2640ff3bb2b395df03eb2657dd2a3 Mon Sep 17 00:00:00 2001
 From: Midgy BALON <midgy971@gmail.com>
 Date: Tue, 9 Jun 2026 16:27:53 +0200
-Subject: [PATCH 01/36] rocket/teflon: add RK3568 NPU conv config support
+Subject: [PATCH 01/39] rocket/teflon: add RK3568 NPU conv config support
  (Draft)
 
 The Rocket Gallium driver / Teflon delegate currently targets the RK3588 NPU.
@@ -292,7 +292,7 @@ index eee2fe174fa..3c8f1a96bb5 100644
 From 35561c80d7bfdc22224aa8dd0a4be57fd65fd5dd Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 21:21:08 +0300
-Subject: [PATCH 02/36] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
+Subject: [PATCH 02/39] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
 
 All of these were read off the vendor command stream embedded in .rknn
 model files, across 44 convolution tasks of mobilenet_v1 and 23 of
@@ -479,7 +479,7 @@ index 5a910a97442..04dc7739e83 100644
 From 735e8172e36345e089d5f3655b02c6e4c54dfbb2 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 20:19:36 +0300
-Subject: [PATCH 03/36] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
+Subject: [PATCH 03/39] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
  and DPU_RDMA 0x5024
 
 The vendor command stream extracted from any .rknn shows three things mesa
@@ -587,7 +587,7 @@ index 2a7bc1cd0d5..526531651fc 100644
 From 9fb550c41d594960aff35a8d3c7bc6ae532e3a1b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:06:30 +0300
-Subject: [PATCH 04/36] rocket/rk3568: fix depthwise, pad value and
+Subject: [PATCH 04/39] rocket/rk3568: fix depthwise, pad value and
  KERNEL_GROUP
 
 Three more differences read off the vendor command stream:
@@ -699,7 +699,7 @@ index 04dc7739e83..4f37b0f6458 100644
 From 814f63fba707cccd4bb5625b45be02ae0a74564b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:54:53 +0300
-Subject: [PATCH 05/36] rocket/rk3568: drop the extra weights CBUF bank
+Subject: [PATCH 05/39] rocket/rk3568: drop the extra weights CBUF bank
 
 calc_weights_banks() added one bank on top of its own estimate, with a
 comment saying the calculation might be wrong on this hardware.  On RK3568
@@ -753,7 +753,7 @@ index 4f37b0f6458..34277967c19 100644
 From e57edd58b836f09d0ea0c078848fa450a240c801 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Sat, 22 Aug 2026 00:21:58 +0300
-Subject: [PATCH 06/36] rocket/rk3568: CBUF banks are 64 KiB, and bands must
+Subject: [PATCH 06/39] rocket/rk3568: CBUF banks are 64 KiB, and bands must
  not overshoot
 
 Two sizing errors that made mesa split layers it did not need to split.
@@ -836,7 +836,7 @@ index 34277967c19..c1936c4583c 100644
 From bde5315dbf92c5c14108262f4b50e865f4c031da Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 14:09:32 +0300
-Subject: [PATCH 07/36] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
+Subject: [PATCH 07/39] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
  load-bearing on RK3568
 
 The vendor stream carries 0x00171c07 in every convolution task of
@@ -880,7 +880,7 @@ index 68d95d39878..38e994e3b32 100644
 From 4916f3957a1d165a29a9884ad31e045309aba6f2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 16:47:30 +0300
-Subject: [PATCH 08/36] rocket: RK3568 vendor per-channel requant + atomic
+Subject: [PATCH 08/39] rocket: RK3568 vendor per-channel requant + atomic
  broadcast unit start
 
 The DPU BS stage now takes all three per-channel operands from the BRDMA
@@ -1251,7 +1251,7 @@ index 38e994e3b32..951a05ffbfa 100644
 From 8f1961445571606ab8d59ed8b9be21b31842ba7b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 20:00:27 +0300
-Subject: [PATCH 09/36] rocket: RK3568 native 8-channel feature atomics end to
+Subject: [PATCH 09/39] rocket: RK3568 native 8-channel feature atomics end to
  end
 
 The RK3568 NPU feature format is planar 8-channel surfaces with 8 bytes
@@ -1653,7 +1653,7 @@ index c1936c4583c..36617fe99bb 100644
 From dd57f25faeba395cb27368d58daf6e7ae0563c9b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:05:34 +0300
-Subject: [PATCH 10/36] rocket: RK3568 ARGB first-layer path (Cin=3)
+Subject: [PATCH 10/39] rocket: RK3568 ARGB first-layer path (Cin=3)
 
 Vendor-verified against a live probe-RGB capture and the mobilenet_v1
 task stream:
@@ -1874,7 +1874,7 @@ index 012dfacd74f..4e680e6e328 100644
 From a39559cb1af7f6abe7f9da5ee7be99f1c975a0d7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:52:09 +0300
-Subject: [PATCH 11/36] rocket: RK3568 depthwise 32-channel groups; keep
+Subject: [PATCH 11/39] rocket: RK3568 depthwise 32-channel groups; keep
  oversized FC on CPU
 
 Depthwise convolutions with more than 32 channels run as one task per
@@ -2142,7 +2142,7 @@ index 6697b37ac28..a08742f8064 100644
 From df2636b8fb107bfca4b7d7e76f6a63af15fd9573 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 22:16:52 +0300
-Subject: [PATCH 12/36] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
+Subject: [PATCH 12/39] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
 
 Delegate only a window of the plan nodes -- layer-by-layer bisection
 of chained networks on partially-working NPU drivers.
@@ -2171,7 +2171,7 @@ index 4e680e6e328..fb6354b8112 100644
 From 4d7fe9147daeba35cb8c6b0cfbf5455fb26f6990 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 23:43:26 +0300
-Subject: [PATCH 13/36] rocket: RK3568 FC-shaped convolution path (opt-in via
+Subject: [PATCH 13/39] rocket: RK3568 FC-shaped convolution path (opt-in via
  RKT_BIG_FC)
 
 A 1x1-spatial-input convolution with a large kernel count (the final
@@ -2365,7 +2365,7 @@ index a08742f8064..51c2fe081ab 100644
 From de50351526af5696f5e78dd5fe9405a2d3edea23 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 00:54:24 +0300
-Subject: [PATCH 14/36] rocket: RK3568 PC-chained job submission; FC path on by
+Subject: [PATCH 14/39] rocket: RK3568 PC-chained job submission; FC path on by
  default
 
 Let the PC unit drive a whole multi-task job through the chain tails
@@ -2577,7 +2577,7 @@ index c8ed4f3caae..14690dd5eb7 100644
 From a69bbc8aeaeb9d6d04eacb8275ae91e592a987f5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 14:00:57 +0300
-Subject: [PATCH 15/36] rocket: RK3568 average-pooling delegation;
+Subject: [PATCH 15/39] rocket: RK3568 average-pooling delegation;
  DST_SURF_STRIDE in raw bytes
 
 Average pooling lowers to a depthwise convolution with constant
@@ -2736,7 +2736,7 @@ index 14690dd5eb7..f8cc5225cb2 100644
 From cf4842090d87525f571e812f01c96e480020ccd7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:11 +0300
-Subject: [PATCH 16/36] rocket: RK3568 FEATURE_GRAINS formula for narrow
+Subject: [PATCH 16/39] rocket: RK3568 FEATURE_GRAINS formula for narrow
  outputs; vendor add config
 
 FEATURE_GRAINS: the vendor's 51 mobilenet_v1 tasks match
@@ -3078,7 +3078,7 @@ index f8cc5225cb2..cd7e36f1d9c 100644
 From b4ce40f9250b32c60b6d03a8a72f11075695b72a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 17/36] rocket: RK3568 announced DPU channels align(Cout, 16)
+Subject: [PATCH 17/39] rocket: RK3568 announced DPU channels align(Cout, 16)
  without the 32 floor
 
 With align-to-32 the DPU waited for surfaces that never come on Cout=16
@@ -3125,7 +3125,7 @@ index 51c2fe081ab..34b6e7a7948 100644
 From ad0cf46ee7359190aa98a352d595a1300e07ef02 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 18/36] rocket: RK3568 compact weight tails for partial ic
+Subject: [PATCH 18/39] rocket: RK3568 compact weight tails for partial ic
  slices and oc groups
 
 WPOKE byte mapping on mobilenet_v2 op8 (Cin=144, Cout=24): the tail ic
@@ -3228,7 +3228,7 @@ index 28bc7ae7777..c7d9c2e5b27 100644
 From 8e0483fa9db2fc8b987b6930e9f80960293e93f9 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 19/36] rocket: fused add requants into the ADD output
+Subject: [PATCH 19/39] rocket: fused add requants into the ADD output
  quantization; C%32 gate
 
 The fused conv+add task kept the convolution's output zero point and
@@ -3282,7 +3282,7 @@ index 55eca0e5a2c..33e8de5cb77 100644
 From 3328cf4096546d36bc308c286595f50bea2ee154 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:29:34 +0300
-Subject: [PATCH 20/36] rocket: pad fused-add kernels to align(C, 32); gate
+Subject: [PATCH 20/39] rocket: pad fused-add kernels to align(C, 32); gate
  banded fused adds
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3590,7 +3590,7 @@ index fb6354b8112..357ec8127c5 100644
 From eb1ae174c9b582b1db916b490d5082caf7611964 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:33:52 +0300
-Subject: [PATCH 21/36] rocket: 8-byte weight kernel rows are ARGB-only;
+Subject: [PATCH 21/39] rocket: 8-byte weight kernel rows are ARGB-only;
  Cin=4..8 uses 16
 
 The 8-byte kernel row in the weight layout belongs to the packed-RGB
@@ -3628,7 +3628,7 @@ index 5e89dd33a3f..dc59436adb6 100644
 From a2e32845fb3bcb092e8e0e98613e312d1b2f9a74 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 19:10:55 +0300
-Subject: [PATCH 22/36] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
+Subject: [PATCH 22/39] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
 
 The second EW input keeps full-height surfaces, so on a row-band task
 the EW RDMA has to skip the part of each surface that lies outside the
@@ -3766,7 +3766,7 @@ index 357ec8127c5..fb6354b8112 100644
 From 0a91d2180afdcec06dfb3878b3aa69f69d7f17c6 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:36 +0300
-Subject: [PATCH 23/36] rocket: ic slices sit above the taps in the dense
+Subject: [PATCH 23/39] rocket: ic slices sit above the taps in the dense
  weight layout
 
 The order inside a 16-kernel group is [ic-slice][tap][oc%16][ic%32],
@@ -3820,7 +3820,7 @@ index dc59436adb6..0e415e0e80a 100644
 From 180ba4010b592b4f6422420c123414e82dbe1ad1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:37 +0300
-Subject: [PATCH 24/36] rocket: fuse residual adds into the later producer;
+Subject: [PATCH 24/39] rocket: fuse residual adds into the later producer;
  wire fused RELU
 
 The EW stream of a fused conv+add task reads the other input's tensor
@@ -3984,7 +3984,7 @@ index 2c8e85a8b03..46f84035c89 100644
 From 61b74ab6080f7ffd6c7c7fb7b82d43d91f6b3a7e Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:52:39 +0300
-Subject: [PATCH 25/36] rocket: align feature surfaces to 4 pixels; real fused
+Subject: [PATCH 25/39] rocket: align feature surfaces to 4 pixels; real fused
  relu; dedup job BOs
 
 Three independent fixes from the resnet18 bring-up:
@@ -4262,7 +4262,7 @@ index e031193b3be..ef4b994befd 100644
 From 99248a6a562deb722ae74047b026e01b1e83328c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 22:31:07 +0300
-Subject: [PATCH 26/36] rocket: chain the whole graph into one PC task chain
+Subject: [PATCH 26/39] rocket: chain the whole graph into one PC task chain
  per submit
 
 Link every operation's last regcmd stream to the next operation's first
@@ -4452,7 +4452,7 @@ index 83c05434f66..95cba34361d 100644
 From 0c0cd848559db01bc188480fc39a69c55468dfbb Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 23:54:48 +0300
-Subject: [PATCH 27/36] rocket: vendor single-interrupt scheme; PPU max pooling
+Subject: [PATCH 27/39] rocket: vendor single-interrupt scheme; PPU max pooling
 
 Completion now follows the vendor driver (rknpu_job_subcore_commit_pc):
 only the LAST task's interrupt is unmasked, so a whole chained graph
@@ -5001,7 +5001,7 @@ index ee755e78a97..777ee263762 100644
 From d506ff6a1c30d53abb429d5c142c05b669a157d8 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 12:56:12 +0300
-Subject: [PATCH 28/36] rocket: average pooling on the PPU
+Subject: [PATCH 28/39] rocket: average pooling on the PPU
 
 Average pooling prefers the PPU chunk too: OPERATION_MODE method bits 0
 and RECIP_KERNEL_WIDTH/HEIGHT = 65536/kernel (vendor probe-AP encoding:
@@ -5125,7 +5125,7 @@ index 3ced8c88154..25f69712b11 100644
 From 442b73c90fee297dde24f70791f98ea8ff044da4 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 13:40:16 +0300
-Subject: [PATCH 29/36] rocket: support FULLY_CONNECTED as a 1x1 convolution
+Subject: [PATCH 29/39] rocket: support FULLY_CONNECTED as a 1x1 convolution
 
 A fully-connected layer over a single spatial pixel is exactly a 1x1
 convolution: the TFLite [out, in] weight matrix is bytewise identical
@@ -5266,7 +5266,7 @@ index fb6354b8112..c1275ab0ae7 100644
 From 08ef3da4b21ea476684395ada2f603d26c5fd3fa Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:02:58 +0300
-Subject: [PATCH 30/36] rocket: channel concatenation as addressing
+Subject: [PATCH 30/39] rocket: channel concatenation as addressing
 
 In the planar 8-channel surface layout a channel-wise concatenation is
 pure addressing: each input occupies its own run of surfaces in the
@@ -5643,7 +5643,7 @@ index 25f69712b11..9b8dbd965d4 100644
 From 3dde38866d6582b5a1e854343f1dc534cfbb5146 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 31/36] rocket: size CBUF banks for the declared input channels
+Subject: [PATCH 31/39] rocket: size CBUF banks for the declared input channels
 
 The band splitter counted CBUF entries from the real channel count
 while DATA_SIZE1 declares align(max(C, 16), 16) channels -- and the
@@ -5704,7 +5704,7 @@ index ef4b994befd..584301bdf78 100644
 From 0eb7a1ce93ec1f9e7d64d9aa3130dd8995bfcd6c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 32/36] rocket: clip the PPU input cube to the consumed rows
+Subject: [PATCH 32/39] rocket: clip the PPU input cube to the consumed rows
  and columns
 
 The PPU derives its window count from the input cube, rounding up: fed
@@ -5779,7 +5779,7 @@ index 9b8dbd965d4..d8ba5309b15 100644
 From db7ec18b86685adce11466ebcf3a70753fbf0c68 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:47:48 +0300
-Subject: [PATCH 33/36] rocket: fix depthwise convolutions with fewer than 32
+Subject: [PATCH 33/39] rocket: fix depthwise convolutions with fewer than 32
  channels
 
 Two mismatches against the vendor stream, found with offline-decoded
@@ -5866,7 +5866,7 @@ index 584301bdf78..5bc892b9cce 100644
 From d2c731a0b017172e427d5669e0e9ec8c78de3d04 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 16:22:54 +0300
-Subject: [PATCH 34/36] rocket: fix the axis convention -- width is the
+Subject: [PATCH 34/39] rocket: fix the axis convention -- width is the
  contiguous memory row
 
 The driver read dims[1] as width and dims[2] as height, but the input
@@ -6064,7 +6064,7 @@ index ca237abdbda..083fbae91cf 100644
 From c53a1ee10c4a37559d1f2a155cd90cce5dbeda5a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:17:04 +0300
-Subject: [PATCH 35/36] rocket: lower the concat identity copy as depthwise
+Subject: [PATCH 35/39] rocket: lower the concat identity copy as depthwise
  when channels allow
 
 The identity copy into a concat output slice was a pointwise
@@ -6160,7 +6160,7 @@ index 083fbae91cf..ca0ec8cd832 100644
 From b79f837a1626443990401ec9ff4cc4640655d3d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:23:59 +0300
-Subject: [PATCH 36/36] rocket: host a leading max pool's PPU chunk in an
+Subject: [PATCH 36/39] rocket: host a leading max pool's PPU chunk in an
  identity-copy carrier
 
 A PPU pool chunk compiles into the regcmd BO of the operation right
@@ -6249,6 +6249,821 @@ index ca0ec8cd832..aa2aef54da4 100644
           util_dynarray_append(&subgraph->operations, operation);
           break;
        }
+-- 
+2.53.0
+
+
+From b53692820eed3378ae5c372034d808308d8f378b Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 20:38:15 +0300
+Subject: [PATCH 37/39] rocket/teflon: support INT8 tensors and per-channel
+ weight quantization
+
+INT8 is folded into the driver's uint8 domain at the edges: teflon
+shifts every zero point by +128 and XORs constant tensor data (the
+weights) with 0x80 when the tensors are created, and the subgraph
+invoke/read_output paths fold the runtime activation buffers the same
+way.  q_u8 = q_i8 + 128 encodes the exact same affine value, so the
+whole pipeline below keeps working in uint8 -- INT32 bias data lives
+in the accumulator domain and needs no change.
+
+Per-channel weight scales use the vendor two-stage requantization
+(RE 2026-08-22): the full [bias i32 x4][ow i16 x4][mul u16 x4] BRDMA
+stream instead of the bias-only one, with mul = round(2^14 * s_wc /
+max(s_w)) renormalizing every channel to the largest scale, which the
+layer-wide OUT_CVT then runs off.  Register changes against the
+bias-only scheme, all matching the vendor streams (mobilenet task 4,
+probe captures): BS_CFG 0x148, BS_MUL_CFG 0xe01 (multiplier from
+stream, shift 14), BS_OW_CFG 0x125 conv / 0x36d dw (OW from stream),
+BS_OW_OP 0, DATA_FORMAT 0xe0 (BS_MUL_SHIFT_VALUE_NEG 14), BRDMA
+DATA_USE 7, and DPU_RDMA 0x5024 -- which turned out to be the BS
+stream length in 8-byte words minus one (channels*4/8-1 only held for
+the bias-only stream; the full stream needs channels*8/8-1, found by
+diffing against the vendor mobilenet stream after the second half of
+every 32-channel group came out as unwritten zero surfaces).
+
+The supported() gate now admits per-axis weight scales for
+convolutions (all zero points equal -- TFLite per-channel weights are
+symmetric) and per-channel bias scales (the bias DATA is already
+quantized with them); activations stay per-tensor.
+
+layer-i8-{conv,dw,c16,c64,c32in,chain} probes: bitwise vs the TFLite
+CPU reference on most patterns, <= 1 LSB everywhere.  The uint8
+regression is unchanged (v1 6 ms, v2 7 ms, resnet18 12 ms).
+---
+ src/gallium/drivers/rocket/rkt_coefs.c    | 17 +++++-
+ src/gallium/drivers/rocket/rkt_ml.c       | 59 ++++++++++++++++++---
+ src/gallium/drivers/rocket/rkt_ml.h       |  4 ++
+ src/gallium/drivers/rocket/rkt_regcmd.c   | 63 ++++++++++++++++-------
+ src/gallium/frontends/teflon/tfl_device.c | 22 ++++++++
+ 5 files changed, 135 insertions(+), 30 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index d97fded5d00..165e8ac52df 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -5,6 +5,7 @@
+ 
+ #include "util/u_inlines.h"
+ 
++#include <math.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -313,10 +314,19 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+     *          whole conv_scale lives in OUT_CVT_SCALE/SHIFT as the vendor does.
+     * Stream length follows the padded channel count the RDMA fetches. */
+    unsigned padded_channels = align(output_channels, 32);
+-   bool bias_only_stream = true; /* per-tensor scheme (vendor probe-D2) */
++   /* Per-tensor quantization uses the vendor's bias-only stream (probe-
++    * D2); per-channel weight scales need the full triple, with mul
++    * renormalizing every channel to max(scales) (shift fixed at 14). */
++   const float *wscales = poperation->conv.weight_tensor->scales;
++   bool bias_only_stream = wscales == NULL;
+    unsigned weight_zero_point = poperation->conv.weight_tensor->zero_point;
++   float s_wmax = 0.0f;
+    uint8_t *stream;
+ 
++   if (wscales != NULL)
++      for (unsigned c = 0; c < output_channels; c++)
++         s_wmax = MAX2(s_wmax, wscales[c]);
++
+    *truncate_bits = 0;
+ 
+    rsc = pipe_buffer_create(pcontext->screen, 0, PIPE_USAGE_DEFAULT,
+@@ -355,7 +365,10 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+          bias32[j] = biases_in[oc] - corr;
+          /* hardware ADDS ow*sum(x): ow = 0x80 - wzp (Test 42) */
+          ow16[j] = 0x80 - weight_zero_point;
+-         mul16[j] = 1 << 14;
++         /* mul = round(2^14 * s_wc / s_wmax) -- renormalize the channel
++          * to the layer scale the OUT_CVT stage runs off (vendor BS
++          * model, RE 2026-08-22). */
++         mul16[j] = (uint16_t)lrintf((wscales[oc] / s_wmax) * (1 << 14));
+          if (getenv("RKT_MULSH"))
+             mul16[j] = 1 << (14 - atoi(getenv("RKT_MULSH")));
+          if (getenv("RKT_WPOKE")) {
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index aa2aef54da4..0a51bfb5385 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -248,6 +248,20 @@ lower_convolution(struct rkt_ml_subgraph *subgraph,
+    operation->weights_zero_point = poperation->conv.weight_tensor->zero_point;
+    operation->weights_scale = poperation->conv.weight_tensor->scale;
+ 
++   /* Per-channel weight quantization (the vendor two-stage scheme): the
++    * layer-wide OUT_CVT runs off the LARGEST channel scale and the BS
++    * mul entries renormalize each channel to it (rkt_fill_biases). */
++   if (poperation->conv.weight_tensor->scales != NULL) {
++      unsigned nch = operation->depthwise
++                        ? poperation->conv.weight_tensor->dims[3]
++                        : poperation->conv.weight_tensor->dims[0];
++      float s_wmax = 0.0f;
++      for (unsigned c = 0; c < nch; c++)
++         s_wmax = MAX2(s_wmax, poperation->conv.weight_tensor->scales[c]);
++      operation->weights_scale = s_wmax;
++      operation->per_channel = true;
++   }
++
+    operation->output_channels_pad = pad_channels;
+    operation->weights = rkt_fill_weights(subgraph, poperation, pad_channels);
+    operation->biases =
+@@ -551,10 +565,29 @@ rkt_ml_operation_supported(struct pipe_ml_device *pdevice,
+       struct pipe_tensor *bias_tensor = operation->conv.bias_tensor;
+       struct pipe_tensor *output_tensor = operation->output_tensors[0];
+ 
+-      // Dilation and per-axis quantization not yet implemented
++      /* Per-axis quantization is supported for the WEIGHTS of a
++       * convolution (the vendor two-stage BS scheme: per-channel mul
++       * against max(scales) plus the layer OUT_CVT), as long as every
++       * channel shares one zero point (TFLite per-channel weights are
++       * symmetric, zp 0).  Bias scales are s_in * s_wc by construction
++       * and never enter the pipeline -- the bias DATA is already
++       * quantized with them.  Activations must stay per-tensor. */
++      bool weights_quant_ok = tensor_quantization_supported(weight_tensor);
++      if (!weights_quant_ok && weight_tensor->scales != NULL) {
++         unsigned nch = operation->conv.depthwise ? weight_tensor->dims[3]
++                                                  : weight_tensor->dims[0];
++         weights_quant_ok = true;
++         if (weight_tensor->zero_points != NULL)
++            for (unsigned c = 0; c < nch; c++)
++               weights_quant_ok &=
++                  weight_tensor->zero_points[c] == weight_tensor->zero_points[0];
++      }
++      bool bias_quant_ok = tensor_quantization_supported(bias_tensor) ||
++                           bias_tensor->scales != NULL;
++
++      // Dilation not yet implemented
+       if (tensor_quantization_supported(input_tensor) &&
+-          tensor_quantization_supported(weight_tensor) &&
+-          tensor_quantization_supported(bias_tensor) &&
++          weights_quant_ok && bias_quant_ok &&
+           tensor_quantization_supported(output_tensor) &&
+           operation->conv.dilation_width_factor == 1 &&
+           operation->conv.dilation_height_factor == 1)
+@@ -1053,8 +1086,13 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+ 
+       struct rkt_resource *input_tensor =
+          rkt_get_tensor(subgraph, operation->input_index);
++      /* INT8 user buffers are folded into the driver's uint8 domain
++       * bytewise (q_u8 = q_i8 XOR 0x80); the zero points were already
++       * shifted by +128 when the tensors were created. */
++      uint8_t fold = is_signed[i] ? 0x80 : 0;
+       if (output_channels == 1 && input_channels == 1 &&
+-          !operation->addition_input && (operation->add_tensor == -1)) {
++          !operation->addition_input && (operation->add_tensor == -1) &&
++          !fold) {
+          pipe_buffer_copy(pcontext, &input_tensor->base, input, 0, 0,
+                           pipe_buffer_size(input));
+       } else {
+@@ -1083,7 +1121,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+                unsigned n = y * line;
+                for (int x = 0; x < input_width; x++)
+                   for (int c = 0; c < 3; c++)
+-                     map[n++] = input_in[y][x][c];
++                     map[n++] = input_in[y][x][c] ^ fold;
+                for (; n < (y + 1) * line;)
+                   map[n++] = 0;
+             }
+@@ -1092,7 +1130,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+             for (int y = 0; y < input_height; y++) {
+                for (int x = 0; x < MAX2(input_width, FEATURE_ATOMIC_SIZE); x++) {
+                   if (x < input_width)
+-                     map[n++] = input_in[y][x][0];
++                     map[n++] = input_in[y][x][0] ^ fold;
+                   else
+                      map[n++] = zero_point;
+                }
+@@ -1112,7 +1150,8 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+                      for (int c = 0; c < 8; c++) {
+                         unsigned input_channel = c + u * 8;
+                         if (input_channel < input_channels)
+-                           map[n++] = input_in[y][x][input_channel] - 0x80;
++                           map[n++] = (input_in[y][x][input_channel] ^ fold) -
++                                      0x80;
+                         else
+                            map[n++] = zero_point - 0x80;
+                      }
+@@ -1423,12 +1462,16 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+          unsigned rows = out_h;   /* memory rows, dims[1] */
+          unsigned cols = out_w;   /* contiguous row length, dims[2] */
+          unsigned surf = rkt_surf_px(rows * cols) * 8;
++         /* An INT8 user buffer wants q_i8 = q_u8 XOR 0x80 (the driver
++          * domain is uint8, see subgraph_invoke). */
++         uint8_t fold = is_signed[i] ? 0x80 : 0;
+          for (int oc = 0; oc < out_c; oc++) {
+             unsigned g = oc / 8, c = oc % 8;
+             for (unsigned y = 0; y < rows; y++) {
+                for (unsigned x = 0; x < cols; x++) {
+                   output_out[y][x][oc] =
+-                     raw[g * surf + (y * cols + x) * 8 + c] + 0x80;
++                     (uint8_t)(raw[g * surf + (y * cols + x) * 8 + c] + 0x80) ^
++                     fold;
+                }
+             }
+          }
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index ed57c868958..227e3f9eab3 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -145,6 +145,10 @@ struct rkt_operation {
+    unsigned weights_height;
+    uint8_t weights_zero_point;
+    float weights_scale;
++   /* Per-channel weight quantization: the BS stream carries the full
++    * [bias][ow][mul] triple, weights_scale holds max(scales) and the
++    * per-channel remainder lives in the mul entries. */
++   bool per_channel;
+ 
+    int add_tensor;
+ 
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index d8ba5309b15..4afc2b63ef0 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -410,8 +410,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_DPU_FEATURE_MODE_CFG, feat_mode_cfg);
+    /* RK3568 vendor requant (RE 2026-08-22): 0xe0 = BS_MUL_SHIFT_VALUE_NEG=14,
+-    * pairs with the shift-14 multiplier stage in BS_MUL_CFG below. */
+-   EMIT(REG_DPU_DATA_FORMAT, 0);
++    * pairs with the shift-14 multiplier stage in BS_MUL_CFG below --
++    * only engaged for the per-channel full BS stream. */
++   EMIT(REG_DPU_DATA_FORMAT, operation->per_channel ? 0xe0 : 0);
+    EMIT(REG_DPU_OFFSET_PEND, 0);
+    EMIT(REG_DPU_DST_BASE_ADDR,
+         rkt_get_tensor(subgraph, operation->output_index)->phys_addr +
+@@ -442,22 +443,37 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * zero point all come per channel from the BRDMA coefficient stream (see
+     * rkt_fill_biases).  0x148: BS_ALU_SRC=1 (bias from stream), relu bypass,
+     * multiplier stage active.  0xe01: multiplier from stream, shift 14. */
+-   EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x158);
+-   EMIT(REG_DPU_BS_ALU_CFG, 0);
+-   EMIT(REG_DPU_BS_MUL_CFG, 0);
+-   EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
+-
+-   if (operation->depthwise) {
+-      EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(3) |
+-                                 DPU_BS_OW_CFG_SIZE_E_1(3) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(3));
++   if (operation->per_channel) {
++      /* Full [bias][ow][mul] BS stream (vendor scheme, RE 2026-08-22):
++       * BS_CFG 0x148, multiplier from the stream with shift 14 (0xe01),
++       * OW source = stream (0x125 conv / 0x36d dw), OW_OP unused. */
++      EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG")
++                              ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16)
++                              : 0x148);
++      EMIT(REG_DPU_BS_ALU_CFG, 0);
++      emit_raw(regs, DPU | 0x1, REG_DPU_BS_MUL_CFG, 0xe01);
++      EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
++      emit_raw(regs, DPU | 0x1, REG_DPU_BS_OW_CFG,
++               operation->depthwise ? 0x36d : 0x125);
++      EMIT(REG_DPU_BS_OW_OP, 0);
+    } else {
+-      EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(1) |
+-                                 DPU_BS_OW_CFG_SIZE_E_1(1) |
+-                                 DPU_BS_OW_CFG_SIZE_E_0(1));
+-   }
++      EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x158);
++      EMIT(REG_DPU_BS_ALU_CFG, 0);
++      EMIT(REG_DPU_BS_MUL_CFG, 0);
++      EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
++
++      if (operation->depthwise) {
++         EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(3) |
++                                    DPU_BS_OW_CFG_SIZE_E_1(3) |
++                                    DPU_BS_OW_CFG_SIZE_E_0(3));
++      } else {
++         EMIT(REG_DPU_BS_OW_CFG, DPU_BS_OW_CFG_SIZE_E_2(1) |
++                                    DPU_BS_OW_CFG_SIZE_E_1(1) |
++                                    DPU_BS_OW_CFG_SIZE_E_0(1));
++      }
+ 
+-   EMIT(REG_DPU_BS_OW_OP, DPU_BS_OW_OP_OW_OP(0x80 - weights_zero_point));
++      EMIT(REG_DPU_BS_OW_OP, DPU_BS_OW_OP_OW_OP(0x80 - weights_zero_point));
++   }
+ 
+    if (!getenv("RKT_NOWDMA")) {
+       EMIT(REG_DPU_WDMA_SIZE_0,
+@@ -589,18 +605,25 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * input goes through the EW RDMA (EW_BASE_ADDR below). */
+    EMIT(REG_DPU_RDMA_RDMA_SRC_BASE_ADDR, 0);
+ 
+-   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG, DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(1));
+-   /* mesa uses the per-tensor bias-only BS stream: 4 bytes per channel. */
++   /* Bias-only per-tensor stream: DATA_USE=1, 4 bytes per channel.
++    * Per-channel full stream: DATA_USE=7, 8 bytes per channel. */
++   EMIT(REG_DPU_RDMA_RDMA_BRDMA_CFG,
++        DPU_RDMA_RDMA_BRDMA_CFG_BRDMA_DATA_USE(operation->per_channel ? 7
++                                                                      : 1));
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+         rkt_resource(operation->biases)->phys_addr +
+-           task->channel_group * 32 * 4);
++           task->channel_group * 32 * (operation->per_channel ? 8 : 4));
+    /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
+     * and is absent from registers.xml, so mesa never writes it.  The vendor
+     * stream in every .rknn writes output_channels - 1 there for all 51 tasks
+     * of mobilenet_v1 (10 distinct values, all matching).  Without it the bias
+     * RDMA has nothing to fetch, which matches our DT_RD being exactly 512
+     * bytes (one bias buffer) short of the vendor's. */
+-   emit_raw(regs, DPU_RDMA | 0x1, 0x5024, task->output_channels * 4 / 8 - 1);
++   /* 0x5024 is the BS stream length in 8-byte words minus one: 4 bytes
++    * per channel for the bias-only stream, 8 for the full per-channel
++    * triple (vendor mobilenet task 4: 64 channels, full stream, 0x3f). */
++   emit_raw(regs, DPU_RDMA | 0x1, 0x5024,
++            task->output_channels * (operation->per_channel ? 8 : 4) / 8 - 1);
+    EMIT(REG_DPU_RDMA_RDMA_NRDMA_CFG, 1); /* bit0 = disable, as vendor */
+    EMIT(REG_DPU_RDMA_RDMA_BN_BASE_ADDR, 0);
+ 
+diff --git a/src/gallium/frontends/teflon/tfl_device.c b/src/gallium/frontends/teflon/tfl_device.c
+index c1275ab0ae7..bf3ad0c1f4c 100644
+--- a/src/gallium/frontends/teflon/tfl_device.c
++++ b/src/gallium/frontends/teflon/tfl_device.c
+@@ -452,6 +452,28 @@ fill_tensor(struct teflon_delegate *delegate, TfLiteContext *tf_context, struct
+    default:
+       tensor->is_signed = false;
+    }
++
++   /* An INT8 tensor is folded into the uint8 domain right here: q_u8 =
++    * q_i8 + 128 (bytewise XOR 0x80) with the zero point shifted by +128
++    * represents the exact same affine value, so the driver below keeps
++    * working in uint8 only.  Bias data is int32 in the accumulator
++    * domain and needs no change.  The is_signed flag stays set so that
++    * subgraph invoke/read_output fold the runtime buffers the same
++    * way. */
++   if (tf_tensor.type == kTfLiteInt8) {
++      tensor->zero_point += 128;
++      if (tensor->zero_points) {
++         const TfLiteAffineQuantization *quant =
++            (const TfLiteAffineQuantization *)tf_tensor.quantization.params;
++         for (int i = 0; i < quant->scale->size; i++)
++            tensor->zero_points[i] += 128;
++      }
++      if (tensor->data) {
++         uint8_t *bytes = tensor->data;
++         for (unsigned i = 0; i < tensor_data_size(tf_tensor); i++)
++            bytes[i] ^= 0x80;
++      }
++   }
+ }
+ 
+ static void
+-- 
+2.53.0
+
+
+From ef7af777701a697dd0ce4889b1cc563dc6151b40 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 21:29:40 +0300
+Subject: [PATCH 38/39] rocket: survive an ADD whose inputs both come from
+ outside the partition
+
+A yolo-style partition can OPEN with an ADD: both inputs then have no
+producer inside the partition and the fused-add lowering dereferenced
+a NULL host (SIGSEGV in rkt_ml_subgraph_create on yolov8n).
+
+Synthesize both producers as identity convolutions: input 1 is copied
+into a synthetic intermediate tensor (its identity conv also carries
+the EW read), input 0 into the host, which requantizes into the ADD
+output domain with the second input on the EW stage as usual.  The
+invoke/read paths learn to pack a partition input that only feeds a
+fused-add EW stage (host output geometry, addition-operand zero
+point), and such a tensor gets its BO created explicitly.
+
+KNOWN ISSUE: the EW contribution comes out as zero on the INT8
+version of this construct (the uint8 equivalent is bitwise-exact on
+uniform fills), and gradients show a spatial error on both -- the
+emitted register streams for the two are IDENTICAL except one LSB of
+OUT_CVT_SCALE, so the remaining difference is in the data itself;
+needs the replay harness.  Tracked in RE-LOG Test 71.  Debug knobs
+left in: RKT_COPY_PW (force the identity copies pointwise),
+RKT_EWPOKE (point the EW read at the weights BO), RKT_TRACE_IN
+(trace input packing and EW addresses).
+---
+ src/gallium/drivers/rocket/rkt_ml.c     | 96 ++++++++++++++++++++++---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 14 +++-
+ 2 files changed, 98 insertions(+), 12 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 0a51bfb5385..2f8c85bca78 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -407,7 +407,8 @@ lower_identity_copy(struct rkt_ml_subgraph *subgraph,
+                     struct rkt_operation *operation)
+ {
+    unsigned channels = input->dims[3];
+-   bool depthwise = channels > 1 && channels % 32 == 0;
++   bool depthwise =
++      channels > 1 && channels % 32 == 0 && !getenv("RKT_COPY_PW");
+    struct pipe_ml_operation conv = {0};
+    struct pipe_tensor out_view = *input;
+    struct pipe_tensor weight_tensor = {0};
+@@ -781,7 +782,8 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+     * with a synthetic intermediate tensor.  Reserve a slot per pool. */
+    unsigned synth_index = tensor_count;
+    for (unsigned i = 0; i < count; i++)
+-      if (poperations[i].type == PIPE_ML_OPERATION_TYPE_POOLING)
++      if (poperations[i].type == PIPE_ML_OPERATION_TYPE_POOLING ||
++          poperations[i].type == PIPE_ML_OPERATION_TYPE_ADD)
+          tensor_count++;
+ 
+    subgraph->tensors = UTIL_DYNARRAY_INIT;
+@@ -930,6 +932,41 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+          struct rkt_operation *host, *other_op;
+          const struct pipe_tensor *other;
+ 
++         if (prod0 == NULL && prod1 == NULL) {
++            /* Both inputs come from outside the partition (a detached
++             * residual, e.g. a yolo partition opening with the ADD):
++             * synthesize BOTH producers as identity convolutions.  The
++             * second input MUST be one too: the EW RDMA reads garbage
++             * (zeroes) from a CPU-packed job INPUT buffer, while it
++             * reads NPU-written tensors fine (every working fused add
++             * has an in-partition producer; RE 2026-08-24, addonly
++             * probe + RKT_EWPOKE) -- so give it one. */
++            struct pipe_tensor synth = *poperations[i].input_tensors[1];
++            struct rkt_operation copy1 = {0};
++            struct rkt_operation copy = {0};
++
++            copy1.add_tensor = -1;
++            synth.index = synth_index++;
++            lower_identity_copy(subgraph, poperations[i].input_tensors[1],
++                                &synth, 0, &copy1);
++            util_dynarray_append(&subgraph->operations, copy1);
++
++            copy.add_tensor = -1;
++            lower_identity_copy(subgraph, poperations[i].input_tensors[0],
++                                poperations[i].output_tensors[0], 0, &copy);
++            util_dynarray_append(&subgraph->operations, copy);
++            prod0 = util_dynarray_element(
++               &subgraph->operations, struct rkt_operation,
++               util_dynarray_num_elements(&subgraph->operations,
++                                          struct rkt_operation) -
++                  1);
++            prod1 = util_dynarray_element(
++               &subgraph->operations, struct rkt_operation,
++               util_dynarray_num_elements(&subgraph->operations,
++                                          struct rkt_operation) -
++                  2);
++         }
++
+          assert(prod0 || prod1);
+ 
+          if (!prod1 || (prod0 && prod0 > prod1)) {
+@@ -981,6 +1018,17 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+          input_channels_1 * input_channels_2;
+ 
+       create_tensor(subgraph, operation->input_index, input_size);
++
++      /* A fused-add second input read from outside the partition has no
++       * producer to create it; its geometry is the host's OUTPUT one. */
++      if (operation->add_tensor != -1 &&
++          find_producer(subgraph, operation->add_tensor) == NULL) {
++         unsigned add_size =
++            rkt_surf_px(operation->output_width * operation->output_height) *
++            DIV_ROUND_UP(operation->output_channels, FEATURE_ATOMIC_SIZE) * 2 *
++            FEATURE_ATOMIC_SIZE;
++         create_tensor(subgraph, operation->add_tensor, add_size);
++      }
+    }
+ 
+    /* Create output tensors */
+@@ -1079,13 +1127,37 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+    for (int i = 0; i < inputs_count; i++) {
+       struct rkt_operation *operation =
+          find_first_consumer(subgraph, input_idxs[i]);
++      bool addition_feed = false;
++
++      /* A partition input can also be the second operand of a fused
++       * addition (no operation lists it as input_index then): pack it
++       * into the add tensor's BO with the HOST's output geometry and
++       * the addition operand's zero point. */
++      if (operation == NULL) {
++         util_dynarray_foreach (&subgraph->operations, struct rkt_operation,
++                                op) {
++            if (op->add_tensor == (int)input_idxs[i]) {
++               operation = op;
++               addition_feed = true;
++               break;
++            }
++         }
++      }
++
++      if (getenv("RKT_TRACE_IN"))
++         fprintf(stderr, "rkt invoke: input %u %s op=%p\n", input_idxs[i],
++                 addition_feed ? "ADDITION" : "primary", (void *)operation);
++
+       struct pipe_resource *input =
+          &rkt_get_tensor(subgraph, input_idxs[i])->base;
+-      unsigned input_channels = operation->input_channels;
++      unsigned input_channels =
++         addition_feed ? operation->output_channels : operation->input_channels;
+       unsigned output_channels = operation->output_channels;
+ 
+-      struct rkt_resource *input_tensor =
+-         rkt_get_tensor(subgraph, operation->input_index);
++      struct rkt_resource *input_tensor = rkt_get_tensor(
++         subgraph,
++         addition_feed ? (unsigned)operation->add_tensor
++                       : operation->input_index);
+       /* INT8 user buffers are folded into the driver's uint8 domain
+        * bytewise (q_u8 = q_i8 XOR 0x80); the zero points were already
+        * shifted by +128 when the tensors were created. */
+@@ -1096,9 +1168,13 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          pipe_buffer_copy(pcontext, &input_tensor->base, input, 0, 0,
+                           pipe_buffer_size(input));
+       } else {
+-         unsigned input_width = operation->input_width;
+-         unsigned input_height = operation->input_height;
+-         unsigned zero_point = operation->input_zero_point;
++         unsigned input_width = addition_feed ? operation->output_width
++                                              : operation->input_width;
++         unsigned input_height = addition_feed ? operation->output_height
++                                               : operation->input_height;
++         unsigned zero_point = addition_feed
++                                  ? 0x80 - operation->addition_offset
++                                  : operation->input_zero_point;
+          struct pipe_transfer *transfer_out;
+          /* NHWC user memory: [height (dims[1])][width (dims[2])][C]. */
+          uint8_t(*input_in)[input_width][input_channels] = inputs[i];
+@@ -1163,8 +1239,8 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          }
+ 
+          if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS))
+-            rkt_dump_buffer(map, "input", 0, 0, 0,
+-                            rkt_get_tensor(subgraph, input_idxs[i])->bo_size);
++            rkt_dump_buffer(map, "input", 0, input_idxs[i], 0,
++                            pipe_buffer_size(&input_tensor->base));
+ 
+          DBG("Converted data\n");
+ 
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 4afc2b63ef0..afa33b1ef14 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -633,9 +633,19 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+        * 0x503c (EW line stride) = surf stride - 8 and EW_SURF_STRIDE =
+        * Wout*Hout*8, both in raw bytes (t3: 0x61f8 / 0x6200). */
+       emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_ERDMA_CFG, 0x40000000);
++      if (getenv("RKT_TRACE_IN"))
++         fprintf(stderr,
++                 "rkt ew: add_tensor=%d phys=0x%lx out_off=%u wphys=0x%lx\n",
++                 operation->add_tensor,
++                 (unsigned long)rkt_get_tensor(subgraph, operation->add_tensor)
++                    ->phys_addr,
++                 task->output_offset,
++                 (unsigned long)rkt_resource(operation->weights)->phys_addr);
+       EMIT(REG_DPU_RDMA_RDMA_EW_BASE_ADDR,
+-           rkt_get_tensor(subgraph, operation->add_tensor)->phys_addr +
+-              task->output_offset);
++           getenv("RKT_EWPOKE")
++              ? rkt_resource(operation->weights)->phys_addr
++              : rkt_get_tensor(subgraph, operation->add_tensor)->phys_addr +
++                   task->output_offset);
+       /* The second-input tensor keeps full-height surfaces regardless of
+        * banding, so the EW surface stride spans the full tensor height
+        * even on a band task (vendor probe-ADDB: 0x6200 on both bands of a
+-- 
+2.53.0
+
+
+From 4c05b9fbe5b10196fcc45585776fb545d41ae72b Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 22:10:09 +0300
+Subject: [PATCH 39/39] rocket: fix the two defects behind the standalone-ADD
+ mismatch
+
+1. A depthwise host for a fused addition reads the EW operand with the
+   wrong surface walk: RDMA_FEATURE_MODE_CFG sits in the depthwise
+   feature mode (0x7816) and the first two 8-channel surfaces of the
+   second input come out ~1/4 range low on every non-uniform input,
+   bitwise with a pointwise host.  The identity copy that hosts an ADD
+   is now forced pointwise, and the fused-add lowering never picks a
+   depthwise convolution as host: it prefers the other producer when
+   that is a regular convolution running later in the chain, and
+   otherwise inserts a pointwise identity copy of the depthwise output
+   to host the add.
+
+2. The OUT_CVT scale encoding lost the implicit leading mantissa bit
+   when rounding carried into it: ((bits >> 9) & 0x7fff) + 1 turns a
+   mantissa of 0x3fff into 0x4000, the "|= 1 << 14" is then a no-op,
+   and the value is 2^e * 1.0 at exponent e instead of 2^e * 2.0 --
+   half the intended scale.  Any conv_scale a hair under a power of
+   two hits it (0.0039062488 for the int8 addonly identity host).
+   Carry the round-up into the exponent, and handle the 0x8000 case
+   the same way.
+
+With both fixed the earlier double-identity workaround is gone (the
+EW stage reads a job input buffer fine), the debug knobs RKT_COPY_PW,
+RKT_EWPOKE, RKT_TRACE_IN are removed.  layer-{i8,u8}-add* probes:
+bitwise; regression unchanged.
+---
+ src/gallium/drivers/rocket/rkt_ml.c     | 83 +++++++++++++++----------
+ src/gallium/drivers/rocket/rkt_regcmd.c | 29 +++++----
+ 2 files changed, 68 insertions(+), 44 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 2f8c85bca78..9cae43b52c4 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -398,17 +398,23 @@ lower_fully_connected(struct rkt_ml_subgraph *subgraph,
+  * with an identity weight matrix.  Used when the input cannot just be
+  * written in place by its producer (it comes from outside the
+  * partition, has other consumers, or its producer is a PPU pool chunk,
+- * which has no requant stage). */
++ * which has no requant stage).
++ *
++ * force_pointwise: a copy that will HOST a fused addition must be
++ * pointwise -- with a depthwise host the EW RDMA runs in the depthwise
++ * feature mode (RDMA_FEATURE_MODE_CFG 0x7816) and reads the second
++ * operand with the wrong surface walk (RE 2026-08-24, addonly probes:
++ * the first two 8-channel surfaces come out ~1/4 range low on every
++ * non-uniform input, bitwise with a pointwise host). */
+ static void
+ lower_identity_copy(struct rkt_ml_subgraph *subgraph,
+                     struct pipe_tensor *input,
+                     const struct pipe_tensor *output,
+-                    unsigned dst_offset,
++                    unsigned dst_offset, bool force_pointwise,
+                     struct rkt_operation *operation)
+ {
+    unsigned channels = input->dims[3];
+-   bool depthwise =
+-      channels > 1 && channels % 32 == 0 && !getenv("RKT_COPY_PW");
++   bool depthwise = channels > 1 && channels % 32 == 0 && !force_pointwise;
+    struct pipe_ml_operation conv = {0};
+    struct pipe_tensor out_view = *input;
+    struct pipe_tensor weight_tensor = {0};
+@@ -782,8 +788,7 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+     * with a synthetic intermediate tensor.  Reserve a slot per pool. */
+    unsigned synth_index = tensor_count;
+    for (unsigned i = 0; i < count; i++)
+-      if (poperations[i].type == PIPE_ML_OPERATION_TYPE_POOLING ||
+-          poperations[i].type == PIPE_ML_OPERATION_TYPE_ADD)
++      if (poperations[i].type == PIPE_ML_OPERATION_TYPE_POOLING)
+          tensor_count++;
+ 
+    subgraph->tensors = UTIL_DYNARRAY_INIT;
+@@ -842,7 +847,7 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+                copy.add_tensor = -1;
+                synth.index = synth_index++;
+                lower_identity_copy(subgraph, pp->input_tensors[0], &synth, 0,
+-                                   &copy);
++                                   false, &copy);
+                util_dynarray_append(&subgraph->operations, copy);
+                pool_input = synth.index;
+             }
+@@ -900,7 +905,8 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+             } else {
+                struct rkt_operation copy = {0};
+                copy.add_tensor = -1;
+-               lower_identity_copy(subgraph, in, out, dst_offset, &copy);
++               lower_identity_copy(subgraph, in, out, dst_offset, false,
++                                   &copy);
+                util_dynarray_append(&subgraph->operations, copy);
+             }
+             ch_off += in->dims[3];
+@@ -935,36 +941,21 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+          if (prod0 == NULL && prod1 == NULL) {
+             /* Both inputs come from outside the partition (a detached
+              * residual, e.g. a yolo partition opening with the ADD):
+-             * synthesize BOTH producers as identity convolutions.  The
+-             * second input MUST be one too: the EW RDMA reads garbage
+-             * (zeroes) from a CPU-packed job INPUT buffer, while it
+-             * reads NPU-written tensors fine (every working fused add
+-             * has an in-partition producer; RE 2026-08-24, addonly
+-             * probe + RKT_EWPOKE) -- so give it one. */
+-            struct pipe_tensor synth = *poperations[i].input_tensors[1];
+-            struct rkt_operation copy1 = {0};
++             * synthesize the host as a pointwise identity convolution
++             * copying input 0 into the ADD output's domain; the EW
++             * stage adds input 1 straight from the job input buffer. */
+             struct rkt_operation copy = {0};
+ 
+-            copy1.add_tensor = -1;
+-            synth.index = synth_index++;
+-            lower_identity_copy(subgraph, poperations[i].input_tensors[1],
+-                                &synth, 0, &copy1);
+-            util_dynarray_append(&subgraph->operations, copy1);
+-
+             copy.add_tensor = -1;
+             lower_identity_copy(subgraph, poperations[i].input_tensors[0],
+-                                poperations[i].output_tensors[0], 0, &copy);
++                                poperations[i].output_tensors[0], 0, true,
++                                &copy);
+             util_dynarray_append(&subgraph->operations, copy);
+             prod0 = util_dynarray_element(
+                &subgraph->operations, struct rkt_operation,
+                util_dynarray_num_elements(&subgraph->operations,
+                                           struct rkt_operation) -
+                   1);
+-            prod1 = util_dynarray_element(
+-               &subgraph->operations, struct rkt_operation,
+-               util_dynarray_num_elements(&subgraph->operations,
+-                                          struct rkt_operation) -
+-                  2);
+          }
+ 
+          assert(prod0 || prod1);
+@@ -979,6 +970,38 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+             other = poperations[i].input_tensors[0];
+          }
+ 
++         /* A depthwise host reads the EW operand with the wrong surface
++          * walk (see lower_identity_copy); when the other producer is a
++          * regular convolution AND runs later in the chain it can host
++          * instead, otherwise fall back to a pointwise identity copy of
++          * the depthwise output hosting the add. */
++         if (host->depthwise) {
++            if (other_op && !other_op->depthwise && other_op > host) {
++               struct rkt_operation *t = host;
++               host = other_op;
++               other_op = t;
++               other = other == poperations[i].input_tensors[0]
++                          ? poperations[i].input_tensors[1]
++                          : poperations[i].input_tensors[0];
++            } else {
++               struct pipe_tensor dw_out = {0};
++               struct rkt_operation copy = {0};
++               unsigned k = host == prod0 ? 0 : 1;
++
++               dw_out = *poperations[i].input_tensors[k];
++               copy.add_tensor = -1;
++               lower_identity_copy(subgraph, &dw_out,
++                                   poperations[i].output_tensors[0], 0, true,
++                                   &copy);
++               util_dynarray_append(&subgraph->operations, copy);
++               host = util_dynarray_element(
++                  &subgraph->operations, struct rkt_operation,
++                  util_dynarray_num_elements(&subgraph->operations,
++                                             struct rkt_operation) -
++                     1);
++            }
++         }
++
+          if (other_op == NULL) {
+             /* Graph input */
+             host->add_tensor = other->index;
+@@ -1144,10 +1167,6 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          }
+       }
+ 
+-      if (getenv("RKT_TRACE_IN"))
+-         fprintf(stderr, "rkt invoke: input %u %s op=%p\n", input_idxs[i],
+-                 addition_feed ? "ADDITION" : "primary", (void *)operation);
+-
+       struct pipe_resource *input =
+          &rkt_get_tensor(subgraph, input_idxs[i])->base;
+       unsigned input_channels =
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index afa33b1ef14..f18133a1f16 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -562,7 +562,22 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       if (operation->truncate_bits > 0)
+          shift--;
+ 
++      /* 15-bit mantissa with the implicit leading one folded into bit
++       * 14 (the "|= 1 << 14" below only fires when the top explicit
++       * mantissa bit is clear).  Rounding a mantissa of 0x3fff up to
++       * 0x4000 sets that bit from the ROUNDING, so the |= is a no-op
++       * and the value is 2^e * 1.0 at exponent e when it should be
++       * 2^e * 2.0 -- half the intended scale.  A conv_scale a hair
++       * under a power of two hits exactly that (RE 2026-08-24, int8
++       * addonly probe: 0.0039062488 came out as 0x4000 >> 23 instead of
++       * 0x4000 >> 22).  Carry the round-up into the exponent. */
+       unsigned scale = ((scale_bits >> 9) & 0x7fff) + 1;
++      if (scale == 0x4000 && ((scale_bits >> 9) & 0x4000) == 0) {
++         shift--;
++      } else if (scale == 0x8000) {
++         scale = 0x4000;
++         shift--;
++      }
+       if (scale < 1 << 14)
+          scale |= 1 << 14;
+ 
+@@ -633,19 +648,9 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+        * 0x503c (EW line stride) = surf stride - 8 and EW_SURF_STRIDE =
+        * Wout*Hout*8, both in raw bytes (t3: 0x61f8 / 0x6200). */
+       emit_raw(regs, DPU_RDMA | 0x1, REG_DPU_RDMA_RDMA_ERDMA_CFG, 0x40000000);
+-      if (getenv("RKT_TRACE_IN"))
+-         fprintf(stderr,
+-                 "rkt ew: add_tensor=%d phys=0x%lx out_off=%u wphys=0x%lx\n",
+-                 operation->add_tensor,
+-                 (unsigned long)rkt_get_tensor(subgraph, operation->add_tensor)
+-                    ->phys_addr,
+-                 task->output_offset,
+-                 (unsigned long)rkt_resource(operation->weights)->phys_addr);
+       EMIT(REG_DPU_RDMA_RDMA_EW_BASE_ADDR,
+-           getenv("RKT_EWPOKE")
+-              ? rkt_resource(operation->weights)->phys_addr
+-              : rkt_get_tensor(subgraph, operation->add_tensor)->phys_addr +
+-                   task->output_offset);
++           rkt_get_tensor(subgraph, operation->add_tensor)->phys_addr +
++              task->output_offset);
+       /* The second-input tensor keeps full-height surfaces regardless of
+        * banding, so the EW surface stride spans the full tensor height
+        * even on a band task (vendor probe-ADDB: 0x6200 on both bands of a
 -- 
 2.53.0
 

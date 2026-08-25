@@ -5,29 +5,39 @@ components: the mainline `accel/rocket` kernel driver (with local fixes)
 and a Mesa Teflon (TFLite delegate) branch. No librknnrt, no vendor
 runtime.
 
-Status (2026-08-24):
+Status (2026-08-25):
 
-- single-convolution probe layers (regular, depthwise, stride-2,
-  3-channel first layer, FC-shaped final layer) match the TFLite CPU
-  reference within 1 LSB across uniform fills, row/column gradients,
-  channel-coded and mixed inputs;
+- single-operation probe layers (regular, depthwise, stride-2,
+  3-channel first layer, fully-connected, concat, standalone add —
+  uint8 and int8, per-tensor and per-channel weights) match the TFLite
+  CPU reference within 1 LSB across uniform fills, row/column
+  gradients, channel-coded and mixed inputs;
 - full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
-  depthwise, the FC-shaped final layer and average pooling: ~6 ms vs
-  116 ms CPU-only on the same board, top-5 matching the CPU
+  depthwise, the FC-shaped final layer and average pooling: ~5.6 ms vs
+  117 ms CPU-only on the same board (~21×), top-5 matching the CPU
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
 - full mobilenet_v2 (224×224 quant) runs as well, including all ten
-  fused residual additions: ~7 ms vs 78 ms CPU-only (~11×), top-5
+  fused residual additions: ~6.4 ms vs 76 ms CPU-only (~12×), top-5
   matching the CPU reference including order, mean absolute logit
   difference 0.82, bit-identical across runs;
 - resnet18 (224×224 quant) runs end-to-end in a single NPU partition —
   convolutions, residual adds, both poolings and the final
-  FULLY_CONNECTED layer: ~12 ms vs 344 ms CPU-only (~28×), max pooling
+  FULLY_CONNECTED layer: ~10.8 ms vs 345 ms CPU-only (~32×), max pooling
   and global average pooling executed by the NPU's dedicated PPU unit;
 - channel CONCATENATION is delegated as pure addressing (each input's
   producer writes its own slice of the output buffer), with an identity
   convolution copy as the fallback when a leg cannot be written in
   place;
+- INT8 tensors are handled without any hardware change: the delegate
+  shifts int8 zero points by 128 and XORs the data with 0x80, so the
+  NPU always sees uint8; per-channel weight quantization is expressed
+  through the DPU BS stream (a per-channel multiplier relative to the
+  largest channel scale) — this is the format most int8 detection
+  models ship in;
+- standalone ADD (no convolution producer inside the partition) runs on
+  a pointwise identity-copy host; a depthwise host reads the second
+  operand with the wrong surface walk and is never chosen;
 - the MAC array runs at 800 MHz (the vendor's own RK3568 operating
   point; the driver default used to be 600 MHz — see the `scmi_rate`
   module parameter below), stress-tested for an hour with bit-identical
@@ -75,7 +85,7 @@ maps and corrupted every non-square one.
 | `module/` | out-of-tree build of the `rocket` kernel driver with RK3568 fixes (fork of the in-tree driver from 7.2-rc7) |
 | `overlay/` | device-tree overlay enabling the NPU on ODROID-M1 |
 | `mesa-patches/` | the Mesa branch as a patch series (also pushed as a branch, see below) |
-| `tests/` | probe-layer test harness (`suite.py`), mobilenet comparison (`mob.py`), single-layer oracle (`run7.py`), vendor-capture replay tool (`replay.c`) |
+| `tests/` | probe-layer test harness (`suite.py`, `suite_i8.py` for int8 probes), mobilenet comparison (`mob.py`), single-layer oracle (`run7.py`), vendor-capture replay tool (`replay.c`) |
 | `models/` | pre-generated quantized single-layer .tflite probes |
 | `capture/` | LD_PRELOAD shim used to capture vendor command streams for comparison (needs the vendor stack, only for further RE work) |
 
@@ -184,9 +194,13 @@ nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
   dims, and every leg but the last a multiple of 16 channels; a graph
   with an unsupported concat keeps the whole partition off the NPU.
 - Softmax and reshape are not delegated.
-- Only convolution/depthwise/add/pooling/concat/fully-connected
-  (+fused ReLU6 via output saturation) and quantized uint8 tensors;
-  per-axis weight quantization is untested.
+- Only convolution/depthwise/add/pooling/concat/fully-connected with
+  fused ReLU/ReLU6 (via output saturation); uint8 or int8 activations
+  (per-tensor), per-tensor or per-channel weights. No other
+  activations yet — the vendor stack runs SiLU and friends through a
+  DPU lookup table, which is understood but not implemented.
+- Timings above are at the NPU clock pinned to 800 MHz via SCMI;
+  "bit-identical" means same board, fixed clock, repeated runs.
 - Debug/rollback knobs: `RKT_NO_CHAIN=1` (per-task submit),
   `RKT_NO_PPU=1` (pooling on CPU / dw-conv path).
 
