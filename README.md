@@ -89,6 +89,7 @@ maps and corrupted every non-square one.
 | `models/` | pre-generated quantized single-layer .tflite probes |
 | `capture/` | LD_PRELOAD shim used to capture vendor command streams for comparison (needs the vendor stack, only for further RE work) |
 | `tools/` | `rknn_regcmd.py` (extract + decode the vendor command stream from a .rknn — tasks cut at the PC tail, so LUT loaders and DPU-only copies are seen; `--table` for the geometry summary), `rknn_diff.py` (diff an `RKT_DUMP` stream against it) |
+| `RE-LOG.md` | the lab log, Tests 1–74, translated from the Russian original: every experiment, what was expected, what came out, what it meant — the "Test N" references in `README-rk3568.md` and the Mesa commit messages point here |
 | `README-rk3568.md` | map of the driver for the next reader: data flow, memory conventions, BS-stream requantization, the load-bearing settings with their lab-log test numbers, debug knobs (copy of the file in the Mesa branch) |
 
 Mesa branch: https://github.com/iav/mesa tree `rk3568-test-session-20260820`
