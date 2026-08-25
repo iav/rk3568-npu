@@ -2064,3 +2064,173 @@ tables can be shared between layers with the same quantization).
   suite.py = u8+i8 (suite_i8.py removed), mob.py in one line + warm-up.
 - Note: on m1 the `github` remote of /media/nvme/mesa keeps a PAT in the URL
   in .git/config — replace with a credential helper.
+
+## Test 75 (2026-08-25): SiLU on the NPU CLOSED — DPU LUT, three discoveries on the way
+
+Implementation (mesa 5fd254e29ca): teflon recognizes CONV→LOGISTIC→MUL
+(silu_pattern, the only readers of the conv output), rocket fuses it into
+the conv: BN_MUL (x_lut = acc·mul>>shift, the FIELD = shift, same for
+per-channel and per-tensor), EW_CFG 0x302, LUT_INFO 0x50500, OUT_CVT scale
+= s_lut/(2·s_out).  One LUT domain for all layers at first: x∈[−8,8),
+1/2048 per unit, y = 2·silu(x).  Probes layer-silu{,-i8,-pt,2}: max 2 LSB;
+yolov8n — all 57 SiLU on the NPU.
+
+1. **The PC LUT loaders are unreliable.**  The vendor layout (2 DPU-only
+   tasks, CFG + 515 data words) — only the FIRST DPU-only task of a chain
+   "arrives" (matrix el/le/Eel/edl/…: `el`→LE ok LO garbage, `le`→LO ok,
+   `Eel`→nothing); the second sometimes lands partially (idx<~100).
+   Delays/retries do not help, a stream >1024 words hangs the PC (per-task
+   limit), S_POINTER ≠0xe hangs, FLYING_MODE=0 hangs (RDMA from address
+   0).  An MMIO write from the kernel (DPU idle) is stable 3/3.  Solution:
+   uapi `lut_data/lut_count` (2×515 words, vendor framing [0][513][t1]),
+   the kernel writes through dpu_iomem before hw_submit.  Reading the LUT
+   back through ACCESS_CFG/DATA over MMIO does NOT return the contents.
+2. **The first ~5 entries of the LO table are broken**: for x∈[LO_START,
+   +~160) the block outputs LO[512]·(x+8)/256 (spike tables: only LO[512]
+   has an effect).  Workaround: LO_START=−512 (inside the LE range) +
+   LUT_CFG 0x28 (HYBRID_PRIORITY=0 → LE wins in the overlap); with 0x68
+   (vendor) LO took the overlap.  LE_END/framing/LUT_INFO are not involved.
+3. **RKT_MULSH also changes the per-channel BS multiplier** (rkt_coefs:
+   2^(14−n)) — ramp measurements with MULSH gave "field = e−5/e−3"; without
+   the knob the field = e.  Ramp tables (LE=i, LO=−i) + spikes — the
+   method that uncovered everything.
+The uapi changed (kernel+mesa together): module/rocket_job.{c,h},
+rocket_accel.h.  Cost: 0 extra tasks in the chain; the LUT is loaded by the
+kernel on every job (~1030 MMIO writes, ≈50 µs).
+
+## Test 76 (2026-08-25): yolov8n ENTIRELY on the NPU — detections match, 27 ms vs 69 CPU
+
+The chain after SiLU (Test 75).  Graph breaks in yolov8n_int8: QUANT×31
+(requant of CONCAT legs), SLICE×16 (C2f split), PAD×7 (before s2 convs), +
+the tail.  Implemented in mesa (teflon+rocket):
+1. **Views** (`rkt_view`): a channel SLICE on an 8-boundary is pure
+   addressing: the consumer gets `src_offset` (surfaces) and
+   `src_channels`; PAD — the consuming conv gets +padding and the source
+   dims.  Resolved in lower_convolution (identity copies and pooling too);
+   the fused-add operand as well (`add_src_offset` in EW_BASE_ADDR).  A
+   partition may export a view — read_outputs reads the source at the
+   offset.
+2. **QUANT int8→int8**: if the producer is in the partition and the QUANT
+   is its only consumer → retarget the producer (OUT_CVT into the new
+   domain, writes the output tensor directly; `orig_output_*` kept for a
+   CPU requant if the old tensor still leaves the partition); otherwise a
+   pointwise identity conv.
+3. teflon: builtin SLICE → STRIDED_SLICE (begin/size), begin/end masks of
+   StridedSlice; `pipe_tensor.dims_count` — rocket takes 4D only (the 3D
+   tail [1,84,2100] was right-aligned and read as a 1×80 map with 1600
+   channels — scores went to zero).
+Defects found on the way:
+- **Bands with a top pad** (layer-big-first-pad 320×320): the last row was
+  garbage — the consumed formula subtracted pad_bottom, and at an odd phase
+  (top pad 1, s2) no bottom padding is needed → the band under-read row
+  319.  Fix: subtract pad_top only.
+- **A SiLU conv cannot host a fused add** (the EW stage is taken by the
+  LUT): the yolo bottleneck add(b, silu(conv(silu(conv(b))))) → as with a
+  depthwise host, a pointwise identity copy hosts the add.  layer-bneck:
+  180 → 3 LSB.
+- **Width >2047** (the DFL conv 1×1 over 4×2100): DATAIN/DATAOUT_WIDTH are
+  11-bit fields → garbage (layer-w2100-c1/c8 vs layer-w300 clean).  Gate:
+  dims[1..2] ≤ 2047, else CPU.
+- **LUT framing** (from Test 75, finished): entry k = word k (no leading
+  zero): SiLU probes max 2 → max 1 LSB, mean 0.2; c2f max 3.
+Result: yolov8n_int8 on bus.jpg — 5 detections CPU = 5 NPU (same
+boxes/classes/scores), raw output mean diff 0.0003; NPU 27.4 ms vs CPU 69
+ms (XNNPACK, 4 cores).  Left on the CPU: the input QUANT float→int8,
+TRANSPOSE/RESHAPE, the 3D DFL tail (SOFTMAX, conv 4×2100, 3D
+SLICE/SUB/ADD/MUL/CONCAT), DEQUANT.  RESIZE×2 (upsample) unsupported,
+splits the neck into 2 partitions: next candidate.
+Probes: layer-{quantcat,pad,slice,c2f,c2f-add,c2f-add-out,bneck,first-*,
+big-first-*,dfl,w2100-*,w300-*}; tests/yolo_cmp.py (bus.jpg, numpy NMS).
+Method: TEFLON_MAX_OPS bisection along SiLU-triple boundaries (LOG+MUL in
+one partition, else a segfault in read_outputs — an artifact of the knife),
+then the smallest probe of the factor.
+
+### Test 76, addendum: a residual race in the PC chain (open)
+Commits: mesa 5996173fbd7, rk3568-npu 13c943f.  layer-c2f-add flakes: ~2%
+of fresh processes, one pixel of row 0 (random column, all cv2 channels).
+Observed:
+- with the LUT rewritten over MMIO on every job — 26/160 (a race with the
+  running chain → the LUT is loaded before the PC starts + readl + 50 µs
+  settle, identical tables are not rewritten; the cache is invalidated on
+  reset and runtime resume, otherwise the LUT is empty after a suspend —
+  silu-c32 80/80 garbage);
+- after that 0/160 within one process's loop, but ~2% in fresh processes,
+  and not only the first invoke (a 2000 µs settle changes nothing);
+- RKT_NO_CHAIN=1 (per-op jobs with a fence) → 40/40 clean ⇒ a race inside
+  the chain: the consumer (cv2, 1×1) reads the concat BO while the write of
+  a tiny producer (identity copy 28×28×16) is not visible yet; "row 0, one
+  column" = the write front.  The vendor puts 73-word DPU-only tasks
+  between operations (8px×32ch, OUTPUT_MODE=4) — a drain-barrier candidate.
+
+### Test 76, the chain race — what was tried the same evening (OPEN, parked)
+- Barrier = a DPU-only task (the vendor's 73-word skeleton, flying): does
+  not complete without CORE data and EATS the first pixels of the next task
+  (deterministic garbage max 87) — this also explains the lost PC LUT
+  loaders (Test 75).  DPU-only tasks without an RDMA input cannot sit in a
+  chain.
+- Barrier = a tiny 1×1×8 identity conv between producer and consumer: does
+  not remove the flake (1/40).  Descriptor int_mask (0x100/0x200/0x3ff) —
+  the chain proceeds at any value: the PC does not wait for done, only for
+  unit busy (consistent with Test 61: the vendor walks by tails, no
+  descriptors).
+- Exact picture (c2f-add-out, output = concat): 1/40 — row 0, one column,
+  channels 12–13 = bytes 4–5 of ONE 8-byte pixel of leg a (identity copy
+  cv1[0:16] → concat).  Not a whole pixel — a partial WDMA write / byte
+  merge when tasks overlap.  The producer is tiny (28×28×16).
+- yolov8n: 20/20 fresh processes bit-identical (maps ≥10×10×256).
+  RKT_NO_CHAIN=1 clean 40/40.  The harm is limited to tiny graphs.
+Ideas for later: (a) remove the copies themselves — cv1 writes straight
+into the concat BO (legs a,b = ordered slices of one tensor → dst_offset at
+cv1, m0 reads b as a view of the concat BO) — also −2 tasks per C2f; (b)
+find out whether the WDMA writes bytewise (the int8 per-channel BS path?)
+and whether the DPU has a "write drain" register.
+
+## Test 77 (2026-08-25): RESIZE nearest ×2 on the NPU — yolov8n 18 ms (2 partitions)
+
+Reconnaissance: tfwork/gen_upsample.py (rknnvenv) → probe-UP.rknn /
+probe-UP-CTRL.  Vendor: Upsample = one DPU-only task per 8-channel surface
+(73 words, the same skeleton as the "copies" and LUT loaders): the RDMA
+reads the Win×Hin surface in "unpooling" mode (RDMA_SRC_DMA_CFG 0x1249:
+KERNEL 2×2, STRIDE 2, UNPOOLING_EN=1; RDMA_FEATURE_MODE_CFG 0xc001 —
+FLYING_MODE=1 in DPU-only tasks means "input from the RDMA", not "from
+CORE": our earlier reading was inverted), the DPU writes 2W×2H:
+DATA_CUBE_WIDTH=2W−1, **DATA_CUBE_HEIGHT=Hin−1** (unpooling doubles the
+rows; with 2H−1 the DPU waits for data forever → every job times out, the
+second surface stays empty), NOTCH_ADDR=2W|2W<<16, SURFACE_ADD=2W·2H·8,
+DST_SURF_STRIDE=2W·8, BS_OW_CFG 0x126, DATA_FORMAT 0x04000000, tail 0x18.
+Implementation: rkt_operation.is_upsample, a task per surface
+(fill_upsample_regcmd, the vendor task skeleton with addresses/sizes
+patched), enable 0x18 / int 0x300.  A QUANT after a pool/upsample is an
+identity copy (a DPU copy cannot requantize; the retarget broke yolo's
+scores).
+Result: layer-up/-out/-c24 ≤1 LSB; yolov8n: 4 partitions → 2, 27 → 18 ms,
+detections = CPU, raw mean diff 3e-4.  Left on the CPU: only the input
+QUANT float→int8 + TRANSPOSE and the 3D DFL tail.
+
+## Test 78 (2026-08-25): performance tails — yolov8n 18 → 14.9 ms
+
+RKT_PROF=1 (invoke phases) showed the NPU computing for 8 ms and the rest
+being CPU around it: (1) a pipe_context was created per invoke (~2.5 ms) →
+one per partition; (2) bytewise packing/unpacking → 8-byte words per pixel;
+(3) an mmap of the BO per map (a leak) → cpu_map lives with the BO; (4)
+one LUT domain for all layers ([−8,8)) saturated the coarse layers → a
+domain per job from the x_max of its SiLU hosts (mesa 4fdbdba48f0,
+RKT_OPS=1 — operation dump); (5) the input QUANT float→int8 + TRANSPOSE
+and the output TRANSPOSE+RESHAPE pairs (yolo exports NCHW) — ~1.5 ms of
+CPU between the delegate and the user buffers → views: the input is read
+from the float NCHW buffer and quantized while packing (NEON, 16 px per
+step for C=3), the outputs are written as planar CHW (mesa 7b1bb194076).
+Pitfalls: (a) the RESHAPE view took its channels from dims[3] of its NCHW
+input (=W) — channels 20–23 came out zero; only the TRANSPOSE (NHWC input)
+knows the channel count; (b) the pattern function in partition_init (plan
+== NULL) returned true for EVERY QUANT — yolo's 32 requantizing QUANTs
+became "input views" (23 detections); without a plan only local criteria
+(float32→int8; perm 0,2,3,1); (c) scalar lrintf over 307k floats — 4.6 ms,
+NEON vcvtnq+vst3q — 0.9; (d) a TEFLON_MAX_OPS window cutting a partition
+down to views only — segfault → a partition without operations does
+nothing.
+Result: yolov8n 14.9 ms (pack 1.8, wait 7.9, unpack 0.9; the remaining ~4
+ms is the 3D DFL tail on the CPU, not low-hanging); v1 5.4, v2 6.3, r18
+11.2 ms; detections = CPU; regression at the baseline.  Not taken: C2f
+without copies (retargeting cv1 into the concat BO broke yolo, gain ~0.2
+ms), the chain race (2% on tiny graphs, yolo 20/20 identical).

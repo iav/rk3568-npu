@@ -1,7 +1,7 @@
 From b79779acc5f2640ff3bb2b395df03eb2657dd2a3 Mon Sep 17 00:00:00 2001
 From: Midgy BALON <midgy971@gmail.com>
 Date: Tue, 9 Jun 2026 16:27:53 +0200
-Subject: [PATCH 01/45] rocket/teflon: add RK3568 NPU conv config support
+Subject: [PATCH 01/49] rocket/teflon: add RK3568 NPU conv config support
  (Draft)
 
 The Rocket Gallium driver / Teflon delegate currently targets the RK3588 NPU.
@@ -292,7 +292,7 @@ index eee2fe174fa..3c8f1a96bb5 100644
 From 35561c80d7bfdc22224aa8dd0a4be57fd65fd5dd Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 21:21:08 +0300
-Subject: [PATCH 02/45] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
+Subject: [PATCH 02/49] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
 
 All of these were read off the vendor command stream embedded in .rknn
 model files, across 44 convolution tasks of mobilenet_v1 and 23 of
@@ -479,7 +479,7 @@ index 5a910a97442..04dc7739e83 100644
 From 735e8172e36345e089d5f3655b02c6e4c54dfbb2 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 20:19:36 +0300
-Subject: [PATCH 03/45] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
+Subject: [PATCH 03/49] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
  and DPU_RDMA 0x5024
 
 The vendor command stream extracted from any .rknn shows three things mesa
@@ -587,7 +587,7 @@ index 2a7bc1cd0d5..526531651fc 100644
 From 9fb550c41d594960aff35a8d3c7bc6ae532e3a1b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:06:30 +0300
-Subject: [PATCH 04/45] rocket/rk3568: fix depthwise, pad value and
+Subject: [PATCH 04/49] rocket/rk3568: fix depthwise, pad value and
  KERNEL_GROUP
 
 Three more differences read off the vendor command stream:
@@ -699,7 +699,7 @@ index 04dc7739e83..4f37b0f6458 100644
 From 814f63fba707cccd4bb5625b45be02ae0a74564b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:54:53 +0300
-Subject: [PATCH 05/45] rocket/rk3568: drop the extra weights CBUF bank
+Subject: [PATCH 05/49] rocket/rk3568: drop the extra weights CBUF bank
 
 calc_weights_banks() added one bank on top of its own estimate, with a
 comment saying the calculation might be wrong on this hardware.  On RK3568
@@ -753,7 +753,7 @@ index 4f37b0f6458..34277967c19 100644
 From e57edd58b836f09d0ea0c078848fa450a240c801 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Sat, 22 Aug 2026 00:21:58 +0300
-Subject: [PATCH 06/45] rocket/rk3568: CBUF banks are 64 KiB, and bands must
+Subject: [PATCH 06/49] rocket/rk3568: CBUF banks are 64 KiB, and bands must
  not overshoot
 
 Two sizing errors that made mesa split layers it did not need to split.
@@ -836,7 +836,7 @@ index 34277967c19..c1936c4583c 100644
 From bde5315dbf92c5c14108262f4b50e865f4c031da Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 14:09:32 +0300
-Subject: [PATCH 07/45] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
+Subject: [PATCH 07/49] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
  load-bearing on RK3568
 
 The vendor stream carries 0x00171c07 in every convolution task of
@@ -880,7 +880,7 @@ index 68d95d39878..38e994e3b32 100644
 From 4916f3957a1d165a29a9884ad31e045309aba6f2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 16:47:30 +0300
-Subject: [PATCH 08/45] rocket: RK3568 vendor per-channel requant + atomic
+Subject: [PATCH 08/49] rocket: RK3568 vendor per-channel requant + atomic
  broadcast unit start
 
 The DPU BS stage now takes all three per-channel operands from the BRDMA
@@ -1251,7 +1251,7 @@ index 38e994e3b32..951a05ffbfa 100644
 From 8f1961445571606ab8d59ed8b9be21b31842ba7b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 20:00:27 +0300
-Subject: [PATCH 09/45] rocket: RK3568 native 8-channel feature atomics end to
+Subject: [PATCH 09/49] rocket: RK3568 native 8-channel feature atomics end to
  end
 
 The RK3568 NPU feature format is planar 8-channel surfaces with 8 bytes
@@ -1653,7 +1653,7 @@ index c1936c4583c..36617fe99bb 100644
 From dd57f25faeba395cb27368d58daf6e7ae0563c9b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:05:34 +0300
-Subject: [PATCH 10/45] rocket: RK3568 ARGB first-layer path (Cin=3)
+Subject: [PATCH 10/49] rocket: RK3568 ARGB first-layer path (Cin=3)
 
 Vendor-verified against a live probe-RGB capture and the mobilenet_v1
 task stream:
@@ -1874,7 +1874,7 @@ index 012dfacd74f..4e680e6e328 100644
 From a39559cb1af7f6abe7f9da5ee7be99f1c975a0d7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:52:09 +0300
-Subject: [PATCH 11/45] rocket: RK3568 depthwise 32-channel groups; keep
+Subject: [PATCH 11/49] rocket: RK3568 depthwise 32-channel groups; keep
  oversized FC on CPU
 
 Depthwise convolutions with more than 32 channels run as one task per
@@ -2142,7 +2142,7 @@ index 6697b37ac28..a08742f8064 100644
 From df2636b8fb107bfca4b7d7e76f6a63af15fd9573 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 22:16:52 +0300
-Subject: [PATCH 12/45] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
+Subject: [PATCH 12/49] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
 
 Delegate only a window of the plan nodes -- layer-by-layer bisection
 of chained networks on partially-working NPU drivers.
@@ -2171,7 +2171,7 @@ index 4e680e6e328..fb6354b8112 100644
 From 4d7fe9147daeba35cb8c6b0cfbf5455fb26f6990 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 23:43:26 +0300
-Subject: [PATCH 13/45] rocket: RK3568 FC-shaped convolution path (opt-in via
+Subject: [PATCH 13/49] rocket: RK3568 FC-shaped convolution path (opt-in via
  RKT_BIG_FC)
 
 A 1x1-spatial-input convolution with a large kernel count (the final
@@ -2365,7 +2365,7 @@ index a08742f8064..51c2fe081ab 100644
 From de50351526af5696f5e78dd5fe9405a2d3edea23 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 00:54:24 +0300
-Subject: [PATCH 14/45] rocket: RK3568 PC-chained job submission; FC path on by
+Subject: [PATCH 14/49] rocket: RK3568 PC-chained job submission; FC path on by
  default
 
 Let the PC unit drive a whole multi-task job through the chain tails
@@ -2577,7 +2577,7 @@ index c8ed4f3caae..14690dd5eb7 100644
 From a69bbc8aeaeb9d6d04eacb8275ae91e592a987f5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 14:00:57 +0300
-Subject: [PATCH 15/45] rocket: RK3568 average-pooling delegation;
+Subject: [PATCH 15/49] rocket: RK3568 average-pooling delegation;
  DST_SURF_STRIDE in raw bytes
 
 Average pooling lowers to a depthwise convolution with constant
@@ -2736,7 +2736,7 @@ index 14690dd5eb7..f8cc5225cb2 100644
 From cf4842090d87525f571e812f01c96e480020ccd7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:11 +0300
-Subject: [PATCH 16/45] rocket: RK3568 FEATURE_GRAINS formula for narrow
+Subject: [PATCH 16/49] rocket: RK3568 FEATURE_GRAINS formula for narrow
  outputs; vendor add config
 
 FEATURE_GRAINS: the vendor's 51 mobilenet_v1 tasks match
@@ -3078,7 +3078,7 @@ index f8cc5225cb2..cd7e36f1d9c 100644
 From b4ce40f9250b32c60b6d03a8a72f11075695b72a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 17/45] rocket: RK3568 announced DPU channels align(Cout, 16)
+Subject: [PATCH 17/49] rocket: RK3568 announced DPU channels align(Cout, 16)
  without the 32 floor
 
 With align-to-32 the DPU waited for surfaces that never come on Cout=16
@@ -3125,7 +3125,7 @@ index 51c2fe081ab..34b6e7a7948 100644
 From ad0cf46ee7359190aa98a352d595a1300e07ef02 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 18/45] rocket: RK3568 compact weight tails for partial ic
+Subject: [PATCH 18/49] rocket: RK3568 compact weight tails for partial ic
  slices and oc groups
 
 WPOKE byte mapping on mobilenet_v2 op8 (Cin=144, Cout=24): the tail ic
@@ -3228,7 +3228,7 @@ index 28bc7ae7777..c7d9c2e5b27 100644
 From 8e0483fa9db2fc8b987b6930e9f80960293e93f9 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 19/45] rocket: fused add requants into the ADD output
+Subject: [PATCH 19/49] rocket: fused add requants into the ADD output
  quantization; C%32 gate
 
 The fused conv+add task kept the convolution's output zero point and
@@ -3282,7 +3282,7 @@ index 55eca0e5a2c..33e8de5cb77 100644
 From 3328cf4096546d36bc308c286595f50bea2ee154 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:29:34 +0300
-Subject: [PATCH 20/45] rocket: pad fused-add kernels to align(C, 32); gate
+Subject: [PATCH 20/49] rocket: pad fused-add kernels to align(C, 32); gate
  banded fused adds
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3590,7 +3590,7 @@ index fb6354b8112..357ec8127c5 100644
 From eb1ae174c9b582b1db916b490d5082caf7611964 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:33:52 +0300
-Subject: [PATCH 21/45] rocket: 8-byte weight kernel rows are ARGB-only;
+Subject: [PATCH 21/49] rocket: 8-byte weight kernel rows are ARGB-only;
  Cin=4..8 uses 16
 
 The 8-byte kernel row in the weight layout belongs to the packed-RGB
@@ -3628,7 +3628,7 @@ index 5e89dd33a3f..dc59436adb6 100644
 From a2e32845fb3bcb092e8e0e98613e312d1b2f9a74 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 19:10:55 +0300
-Subject: [PATCH 22/45] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
+Subject: [PATCH 22/49] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
 
 The second EW input keeps full-height surfaces, so on a row-band task
 the EW RDMA has to skip the part of each surface that lies outside the
@@ -3766,7 +3766,7 @@ index 357ec8127c5..fb6354b8112 100644
 From 0a91d2180afdcec06dfb3878b3aa69f69d7f17c6 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:36 +0300
-Subject: [PATCH 23/45] rocket: ic slices sit above the taps in the dense
+Subject: [PATCH 23/49] rocket: ic slices sit above the taps in the dense
  weight layout
 
 The order inside a 16-kernel group is [ic-slice][tap][oc%16][ic%32],
@@ -3820,7 +3820,7 @@ index dc59436adb6..0e415e0e80a 100644
 From 180ba4010b592b4f6422420c123414e82dbe1ad1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:37 +0300
-Subject: [PATCH 24/45] rocket: fuse residual adds into the later producer;
+Subject: [PATCH 24/49] rocket: fuse residual adds into the later producer;
  wire fused RELU
 
 The EW stream of a fused conv+add task reads the other input's tensor
@@ -3984,7 +3984,7 @@ index 2c8e85a8b03..46f84035c89 100644
 From 61b74ab6080f7ffd6c7c7fb7b82d43d91f6b3a7e Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:52:39 +0300
-Subject: [PATCH 25/45] rocket: align feature surfaces to 4 pixels; real fused
+Subject: [PATCH 25/49] rocket: align feature surfaces to 4 pixels; real fused
  relu; dedup job BOs
 
 Three independent fixes from the resnet18 bring-up:
@@ -4262,7 +4262,7 @@ index e031193b3be..ef4b994befd 100644
 From 99248a6a562deb722ae74047b026e01b1e83328c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 22:31:07 +0300
-Subject: [PATCH 26/45] rocket: chain the whole graph into one PC task chain
+Subject: [PATCH 26/49] rocket: chain the whole graph into one PC task chain
  per submit
 
 Link every operation's last regcmd stream to the next operation's first
@@ -4452,7 +4452,7 @@ index 83c05434f66..95cba34361d 100644
 From 0c0cd848559db01bc188480fc39a69c55468dfbb Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 23:54:48 +0300
-Subject: [PATCH 27/45] rocket: vendor single-interrupt scheme; PPU max pooling
+Subject: [PATCH 27/49] rocket: vendor single-interrupt scheme; PPU max pooling
 
 Completion now follows the vendor driver (rknpu_job_subcore_commit_pc):
 only the LAST task's interrupt is unmasked, so a whole chained graph
@@ -5001,7 +5001,7 @@ index ee755e78a97..777ee263762 100644
 From d506ff6a1c30d53abb429d5c142c05b669a157d8 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 12:56:12 +0300
-Subject: [PATCH 28/45] rocket: average pooling on the PPU
+Subject: [PATCH 28/49] rocket: average pooling on the PPU
 
 Average pooling prefers the PPU chunk too: OPERATION_MODE method bits 0
 and RECIP_KERNEL_WIDTH/HEIGHT = 65536/kernel (vendor probe-AP encoding:
@@ -5125,7 +5125,7 @@ index 3ced8c88154..25f69712b11 100644
 From 442b73c90fee297dde24f70791f98ea8ff044da4 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 13:40:16 +0300
-Subject: [PATCH 29/45] rocket: support FULLY_CONNECTED as a 1x1 convolution
+Subject: [PATCH 29/49] rocket: support FULLY_CONNECTED as a 1x1 convolution
 
 A fully-connected layer over a single spatial pixel is exactly a 1x1
 convolution: the TFLite [out, in] weight matrix is bytewise identical
@@ -5266,7 +5266,7 @@ index fb6354b8112..c1275ab0ae7 100644
 From 08ef3da4b21ea476684395ada2f603d26c5fd3fa Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:02:58 +0300
-Subject: [PATCH 30/45] rocket: channel concatenation as addressing
+Subject: [PATCH 30/49] rocket: channel concatenation as addressing
 
 In the planar 8-channel surface layout a channel-wise concatenation is
 pure addressing: each input occupies its own run of surfaces in the
@@ -5643,7 +5643,7 @@ index 25f69712b11..9b8dbd965d4 100644
 From 3dde38866d6582b5a1e854343f1dc534cfbb5146 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 31/45] rocket: size CBUF banks for the declared input channels
+Subject: [PATCH 31/49] rocket: size CBUF banks for the declared input channels
 
 The band splitter counted CBUF entries from the real channel count
 while DATA_SIZE1 declares align(max(C, 16), 16) channels -- and the
@@ -5704,7 +5704,7 @@ index ef4b994befd..584301bdf78 100644
 From 0eb7a1ce93ec1f9e7d64d9aa3130dd8995bfcd6c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 32/45] rocket: clip the PPU input cube to the consumed rows
+Subject: [PATCH 32/49] rocket: clip the PPU input cube to the consumed rows
  and columns
 
 The PPU derives its window count from the input cube, rounding up: fed
@@ -5779,7 +5779,7 @@ index 9b8dbd965d4..d8ba5309b15 100644
 From db7ec18b86685adce11466ebcf3a70753fbf0c68 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:47:48 +0300
-Subject: [PATCH 33/45] rocket: fix depthwise convolutions with fewer than 32
+Subject: [PATCH 33/49] rocket: fix depthwise convolutions with fewer than 32
  channels
 
 Two mismatches against the vendor stream, found with offline-decoded
@@ -5866,7 +5866,7 @@ index 584301bdf78..5bc892b9cce 100644
 From d2c731a0b017172e427d5669e0e9ec8c78de3d04 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 16:22:54 +0300
-Subject: [PATCH 34/45] rocket: fix the axis convention -- width is the
+Subject: [PATCH 34/49] rocket: fix the axis convention -- width is the
  contiguous memory row
 
 The driver read dims[1] as width and dims[2] as height, but the input
@@ -6064,7 +6064,7 @@ index ca237abdbda..083fbae91cf 100644
 From c53a1ee10c4a37559d1f2a155cd90cce5dbeda5a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:17:04 +0300
-Subject: [PATCH 35/45] rocket: lower the concat identity copy as depthwise
+Subject: [PATCH 35/49] rocket: lower the concat identity copy as depthwise
  when channels allow
 
 The identity copy into a concat output slice was a pointwise
@@ -6160,7 +6160,7 @@ index 083fbae91cf..ca0ec8cd832 100644
 From b79f837a1626443990401ec9ff4cc4640655d3d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:23:59 +0300
-Subject: [PATCH 36/45] rocket: host a leading max pool's PPU chunk in an
+Subject: [PATCH 36/49] rocket: host a leading max pool's PPU chunk in an
  identity-copy carrier
 
 A PPU pool chunk compiles into the regcmd BO of the operation right
@@ -6256,7 +6256,7 @@ index ca0ec8cd832..aa2aef54da4 100644
 From b53692820eed3378ae5c372034d808308d8f378b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 20:38:15 +0300
-Subject: [PATCH 37/45] rocket/teflon: support INT8 tensors and per-channel
+Subject: [PATCH 37/49] rocket/teflon: support INT8 tensors and per-channel
  weight quantization
 
 INT8 is folded into the driver's uint8 domain at the edges: teflon
@@ -6615,7 +6615,7 @@ index c1275ab0ae7..bf3ad0c1f4c 100644
 From ef7af777701a697dd0ce4889b1cc563dc6151b40 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 21:29:40 +0300
-Subject: [PATCH 38/45] rocket: survive an ADD whose inputs both come from
+Subject: [PATCH 38/49] rocket: survive an ADD whose inputs both come from
  outside the partition
 
 A yolo-style partition can OPEN with an ADD: both inputs then have no
@@ -6830,7 +6830,7 @@ index 4afc2b63ef0..afa33b1ef14 100644
 From 4c05b9fbe5b10196fcc45585776fb545d41ae72b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 22:10:09 +0300
-Subject: [PATCH 39/45] rocket: fix the two defects behind the standalone-ADD
+Subject: [PATCH 39/49] rocket: fix the two defects behind the standalone-ADD
  mismatch
 
 1. A depthwise host for a fused addition reads the EW operand with the
@@ -7071,7 +7071,7 @@ index afa33b1ef14..f18133a1f16 100644
 From 8fb3fa0020096ad83fd3215c0302355f9fbf46d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 14:49:12 +0300
-Subject: [PATCH 40/45] rocket: drop the dead RE probes, keep the documented
+Subject: [PATCH 40/49] rocket: drop the dead RE probes, keep the documented
  debug knobs
 
 Remove the environment probes whose answers are already baked into the
@@ -7596,7 +7596,7 @@ index 5bc892b9cce..be449b9882c 100644
 From 74c04966edcc08f611684cc0c3d8ad0428c7b5c5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 14:51:46 +0300
-Subject: [PATCH 41/45] rocket: add README-rk3568.md, a map of the RK3568 path
+Subject: [PATCH 41/49] rocket: add README-rk3568.md, a map of the RK3568 path
  for the next reader
 
 Data flow through the delegate, the memory conventions (axes, 8-channel
@@ -7782,7 +7782,7 @@ index 00000000000..49ca261ff0d
 From 7c409cf6a6db218c69854b82eb02813df57e67c2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 15:16:32 +0300
-Subject: [PATCH 42/45] rocket: README-rk3568.md: point at the published lab
+Subject: [PATCH 42/49] rocket: README-rk3568.md: point at the published lab
  log
 
 ---
@@ -7813,7 +7813,7 @@ index 49ca261ff0d..a2fe289b620 100644
 From 5fd254e29ca323711a40bc4f29616e09185172dc Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 16:36:50 +0300
-Subject: [PATCH 43/45] rocket/teflon: fuse x * sigmoid(x) (SiLU) into the
+Subject: [PATCH 43/49] rocket/teflon: fuse x * sigmoid(x) (SiLU) into the
  convolution via the DPU LUT
 
 TFLite lowers SiLU to CONV -> LOGISTIC -> MUL(conv_out, logistic_out).
@@ -8440,7 +8440,7 @@ index cbce129eea2..e85fc4c79d5 100644
 From 5996173fbd72e58ac6b1bfa9ab372ab83acd69bc Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 17:52:20 +0300
-Subject: [PATCH 44/45] rocket/teflon: yolo's C2f plumbing -- SLICE, QUANTIZE
+Subject: [PATCH 44/49] rocket/teflon: yolo's C2f plumbing -- SLICE, QUANTIZE
  and PAD without copies
 
 yolov8n's graph broke into dozens of partitions on three operations
@@ -9156,7 +9156,7 @@ index e85fc4c79d5..030865572f0 100644
 From 5969b995995dc04e20cfd06ad256837551ad5a4f Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 18:29:55 +0300
-Subject: [PATCH 45/45] rocket: nearest-neighbour 2x upsample on the DPU
+Subject: [PATCH 45/49] rocket: nearest-neighbour 2x upsample on the DPU
  (yolo's neck RESIZE)
 
 The vendor's Resize is a DPU-only task per 8-channel surface: the DPU
@@ -9456,6 +9456,1030 @@ index cdb77387afa..0c8cc4c74f1 100644
     /*
      * TODO: We should only need to set all the registers on the regcmd for the first
      * task in an operation, but for now set them all to be sure.
+-- 
+2.53.0
+
+
+From af2d89417b1ba9c47bc82bbbd00f3aa0768b71e4 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 18:46:15 +0300
+Subject: [PATCH 46/49] rocket/teflon: cut the CPU side of an invoke -- one
+ context, 8-byte packing
+
+- teflon: one pipe_context per partition instead of one per invoke
+  (creating and destroying it cost ~2.5 ms per inference on rocket).
+- rocket: the input packing and output unpacking move 8-byte pixels in
+  and out of the uncached BO mappings instead of single bytes (ARGB rows
+  are memcpy'd, or XORed 8 bytes at a time for int8 input).
+- RKT_PROF=1 prints the phase timing of every invoke (pack, submit, wait,
+  unpack) and the task mix of the chain.
+
+yolov8n_int8: delegate time 13.5 -> 11 ms (pack 2.0 -> 1.3, unpack
+2.4 -> 1.1, the NPU itself 8.2 ms); end to end 18.4 -> 16.4 ms.
+---
+ src/gallium/drivers/rocket/rkt_ml.c       | 122 +++++++++++++++++-----
+ src/gallium/frontends/teflon/tfl_device.c |  15 ++-
+ 2 files changed, 105 insertions(+), 32 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 4803fc36c2b..d87f82b0982 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -9,8 +9,26 @@
+ #include "util/u_inlines.h"
+ 
+ #include <math.h>
++#include <time.h>
+ #include <xf86drm.h>
+ 
++/* RKT_PROF=1: per-invoke phase timing (pack / submit / wait / unpack). */
++static double
++prof_ms(void)
++{
++   struct timespec t;
++   clock_gettime(CLOCK_MONOTONIC, &t);
++   return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
++}
++static bool
++prof_on(void)
++{
++   static int on = -1;
++   if (on < 0)
++      on = getenv("RKT_PROF") != NULL;
++   return on;
++}
++
+ #include "drm-uapi/rocket_accel.h"
+ 
+ #include "rkt_coefs.h"
+@@ -1460,6 +1478,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+    int ret;
+ 
+    DBG("Processing input\n");
++   double t0 = prof_ms();
+ 
+    for (int i = 0; i < inputs_count; i++) {
+       struct rkt_operation *operation =
+@@ -1526,13 +1545,27 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+             /* ARGB input: packed RGB, raw uint8 (the CNA CVT stage shifts by
+              * -128), rows aligned to 8 bytes with zero padding. */
+             unsigned line = DIV_ROUND_UP(input_width * 3, 8) * 8;
++            unsigned row = input_width * 3;
+             for (int y = 0; y < input_height; y++) {
+-               unsigned n = y * line;
+-               for (int x = 0; x < input_width; x++)
+-                  for (int c = 0; c < 3; c++)
+-                     map[n++] = input_in[y][x][c] ^ fold;
+-               for (; n < (y + 1) * line;)
+-                  map[n++] = 0;
++               const uint8_t *src = (const uint8_t *)input_in[y];
++               uint8_t *dst = map + y * line;
++               if (fold == 0) {
++                  memcpy(dst, src, row);
++               } else {
++                  /* 8 bytes at a time into the uncached mapping. */
++                  uint64_t f64 = 0x0101010101010101ull * fold;
++                  unsigned k = 0;
++                  for (; k + 8 <= row; k += 8) {
++                     uint64_t v;
++                     memcpy(&v, src + k, 8);
++                     v ^= f64;
++                     memcpy(dst + k, &v, 8);
++                  }
++                  for (; k < row; k++)
++                     dst[k] = src[k] ^ fold;
++               }
++               if (line > row)
++                  memset(dst + row, 0, line - row);
+             }
+          } else if (input_channels == 1) {
+             unsigned n = 0;
+@@ -1549,25 +1582,27 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+              * capture, probe-D2 impulses 2026-08-22): 8 bytes per pixel
+              * carrying 8 channels, planar 8-channel surfaces of stride
+              * W*H*8; all CNA/DPU strides are in 8-byte units. */
+-            unsigned n = 0;
+             unsigned surf_pad =
+                rkt_surf_px(input_width * input_height) -
+                input_width * input_height;
++            unsigned px = input_width * input_height;
++            uint64_t *dst64 = (uint64_t *)map;
++            uint8_t pad_byte = zero_point - 0x80;
++            uint64_t pad64 = 0x0101010101010101ull * pad_byte;
++            /* One 8-byte pixel per store: the BO mapping is not cached. */
+             for (int u = 0; u < DIV_ROUND_UP(input_channels, 8); u++) {
+-               for (int y = 0; y < input_height; y++) {
+-                  for (int x = 0; x < input_width; x++) {
+-                     for (int c = 0; c < 8; c++) {
+-                        unsigned input_channel = c + u * 8;
+-                        if (input_channel < input_channels)
+-                           map[n++] = (input_in[y][x][input_channel] ^ fold) -
+-                                      0x80;
+-                        else
+-                           map[n++] = zero_point - 0x80;
+-                     }
+-                  }
++               unsigned c0 = u * 8;
++               unsigned nc = MIN2(8u, input_channels - c0);
++               const uint8_t *src = (const uint8_t *)input_in + c0;
++               for (unsigned p = 0; p < px; p++, src += input_channels) {
++                  uint64_t v = pad64;
++                  for (unsigned c = 0; c < nc; c++)
++                     v = (v & ~(0xffull << (8 * c))) |
++                         ((uint64_t)(uint8_t)((src[c] ^ fold) - 0x80) << (8 * c));
++                  *dst64++ = v;
+                }
+-               for (unsigned p = 0; p < surf_pad * 8; p++)
+-                  map[n++] = zero_point - 0x80;
++               for (unsigned p = 0; p < surf_pad; p++)
++                  *dst64++ = pad64;
+             }
+          }
+ 
+@@ -1614,6 +1649,19 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+             : 0xc00;
+       uint32_t last_int_mask = last_op->is_pool ? pool_int_mask : 0x300;
+ 
++      if (prof_on()) {
++         unsigned n_copy = 0, n_up = 0, n_pool = 0, n_silu = 0;
++         util_dynarray_foreach (&subgraph->operations, struct rkt_operation, op) {
++            n_copy += op->weights_width == 1 && op->weights_height == 1 &&
++                      !op->is_pool && !op->is_upsample && op->output_channels == op->input_channels &&
++                      !op->silu && op->stride == 1;
++            n_up += op->is_upsample;
++            n_pool += op->is_pool;
++            n_silu += op->silu;
++         }
++         fprintf(stderr, "rkt prof: %u ops (%u silu, %u pool, %u upsample, ~%u 1x1 same-C), %u tasks\n",
++                 num_ops, n_silu, n_pool, n_up, n_copy, total_tasks);
++      }
+       struct drm_rocket_task *tasks = calloc(total_tasks, sizeof(*tasks));
+       /* 0 convolution stream, 1 PPU pool chunk, 2 DPU-only upsample. */
+       uint8_t *task_is_pool = calloc(total_tasks, sizeof(uint8_t));
+@@ -1806,8 +1854,12 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+    submit.jobs = (uint64_t)util_dynarray_begin(&jobs);
+    submit.job_count = util_dynarray_num_elements(&jobs, struct drm_rocket_job);
+ 
++   double t1 = prof_ms();
+    ret = drmIoctl(screen->fd, DRM_IOCTL_ROCKET_SUBMIT, &submit);
+    assert(ret == 0);
++   if (prof_on())
++      fprintf(stderr, "rkt prof: pack %.2f ms, submit %.2f ms\n", t1 - t0,
++              prof_ms() - t1);
+ 
+    util_dynarray_foreach (&jobs, struct drm_rocket_job, job) {
+       free((void *)job->in_bo_handles);
+@@ -1829,6 +1881,7 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+    struct rkt_ml_subgraph *subgraph = (struct rkt_ml_subgraph *)(psubgraph);
+ 
+    DBG("Processing output\n");
++   double tw = 0, tu = 0, tstart = prof_ms();
+ 
+    for (int i = 0; i < outputs_count; i++) {
+       unsigned idx = output_idxs[i];
+@@ -1885,17 +1938,18 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+        * 28*28*8 for the 28x28 probe).  The previous 16-channel unpack only
+        * looked correct on channel-uniform fills. */
+       uint8_t(*output_in)[out_h][out_w][8];
+-      uint8_t(*output_out)[out_w][out_c];
+ 
+       DBG("Before pipe_buffer_map\n");
++      double tm = prof_ms();
+       raw_output = pipe_buffer_map(pcontext, &output_tensor->base, PIPE_MAP_READ,
+                                    &transfer);
++      tw += prof_ms() - tm;
++      double tu0 = prof_ms();
+       DBG("After pipe_buffer_map\n");
+ 
+       DBG("Converting data\n");
+ 
+       output_in = (void *)raw_output;
+-      output_out = (void *)outputs[i];
+ 
+       if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS))
+          rkt_dump_buffer(raw_output, "output", 0, 0, 0, output_tensor->bo_size);
+@@ -1914,27 +1968,39 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+          float rq_scale = requant ? operation->output_scale /
+                                        operation->orig_output_scale
+                                   : 1.0f;
+-         for (int oc = 0; oc < out_c; oc++) {
+-            unsigned g = oc / 8, c = oc % 8;
+-            for (unsigned y = 0; y < rows; y++) {
+-               for (unsigned x = 0; x < cols; x++) {
+-                  uint8_t q = raw[g * surf + (y * cols + x) * 8 + c] + 0x80;
++         /* One 8-byte pixel per load from the (uncached) BO, then the
++          * channel bytes scatter into the NHWC user buffer. */
++         unsigned px = rows * cols;
++         uint8_t *ubuf = (uint8_t *)outputs[i];
++         for (unsigned g = 0; g < DIV_ROUND_UP(out_c, 8); g++) {
++            unsigned c0 = g * 8;
++            unsigned nc = MIN2(8u, out_c - c0);
++            const uint64_t *src64 = (const uint64_t *)(raw + g * surf);
++            uint8_t *dst = ubuf + c0;
++            for (unsigned p = 0; p < px; p++, dst += out_c) {
++               uint64_t v = src64[p];
++               for (unsigned c = 0; c < nc; c++) {
++                  uint8_t q = (uint8_t)(v >> (8 * c)) + 0x80;
+                   if (requant) {
+                      float r = (float)operation->orig_output_zero_point +
+                                ((int)q - (int)operation->output_zero_point) *
+                                   rq_scale;
+                      q = (uint8_t)CLAMP(lrintf(r), 0, 255);
+                   }
+-                  output_out[y][x][oc] = q ^ fold;
++                  dst[c] = q ^ fold;
+                }
+             }
+          }
+       }
+ 
+       DBG("Converted data\n");
++      tu += prof_ms() - tu0;
+ 
+       pipe_buffer_unmap(pcontext, transfer);
+    }
++   if (prof_on())
++      fprintf(stderr, "rkt prof: wait %.2f ms, unpack %.2f ms (%d outputs, total %.2f)\n",
++              tw, tu, outputs_count, prof_ms() - tstart);
+ 
+    DBG("Processed output\n");
+ }
+diff --git a/src/gallium/frontends/teflon/tfl_device.c b/src/gallium/frontends/teflon/tfl_device.c
+index 8fb8619e8c6..27b8e71e83f 100644
+--- a/src/gallium/frontends/teflon/tfl_device.c
++++ b/src/gallium/frontends/teflon/tfl_device.c
+@@ -167,6 +167,10 @@ struct teflon_subgraph {
+ 
+    unsigned *output_tensors;
+    unsigned output_count;
++
++   /* Context for invoke/read_output, created once per partition: creating
++    * one per invoke cost ~2.5 ms on the rocket driver. */
++   struct pipe_context *context;
+ };
+ 
+ static void
+@@ -833,6 +837,8 @@ partition_free(TfLiteContext *tf_context, void *buffer)
+    struct pipe_ml_subgraph *subgraph = tsubgraph->base;
+ 
+    subgraph->device->ml_subgraph_destroy(subgraph->device, subgraph);
++   if (tsubgraph->context)
++      tsubgraph->context->destroy(tsubgraph->context);
+    free(tsubgraph->input_tensors);
+    free(tsubgraph->output_tensors);
+    free(tsubgraph);
+@@ -844,9 +850,13 @@ partition_invoke(TfLiteContext *tf_context, TfLiteNode *node)
+    struct teflon_delegate *delegate = (struct teflon_delegate *)node->delegate;
+    struct teflon_subgraph *tsubgraph = (struct teflon_subgraph *)node->user_data;
+    struct pipe_ml_subgraph *subgraph = tsubgraph->base;
+-   struct pipe_context *context = delegate->screen->context_create(delegate->screen, NULL, PIPE_CONTEXT_COMPUTE_ONLY);
+    long start = 0, end = 0;
+ 
++   if (!tsubgraph->context)
++      tsubgraph->context = delegate->screen->context_create(
++         delegate->screen, NULL, PIPE_CONTEXT_COMPUTE_ONLY);
++   struct pipe_context *context = tsubgraph->context;
++
+    if (unlikely(debug_get_option_debug_teflon() & TEFLON_DEBUG_VERBOSE)) {
+       struct timespec time;
+       clock_gettime(CLOCK_MONOTONIC, &time);
+@@ -890,9 +900,6 @@ partition_invoke(TfLiteContext *tf_context, TfLiteNode *node)
+       teflon_debug("teflon: invoked graph, took %ld ms\n", (end - start));
+    }
+ 
+-   context->destroy(context);
+-   context = NULL;
+-
+    return kTfLiteOk;
+ }
+ 
+-- 
+2.53.0
+
+
+From 4fdbdba48f03ace9cd88fda980a1fd69a46cb9aa Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 19:04:17 +0300
+Subject: [PATCH 47/49] rocket: one LUT domain per job, sized from the SiLU
+ layers it serves
+
+The lookup-table output is 16 bits holding 2 * silu(x) in LUT units,
+so a fixed [-8, 8) domain saturated on layers quantized coarsely (a
+C2f whose concat scale is 0.68 per LSB wants x up to 172).  The domain
+is now chosen after lowering, once every SiLU host has its final output
+quantization: x_max over the hosts, one unit = x_max / 8192, tables
+built once per subgraph (finalize_silu).  The per-operation table
+copies are gone.
+
+RKT_OPS=1 prints the lowered operation list (indices, surface offsets,
+quantization, fused add operands).
+---
+ src/gallium/drivers/rocket/rkt_ml.c | 88 +++++++++++++++++++----------
+ src/gallium/drivers/rocket/rkt_ml.h | 12 +---
+ 2 files changed, 60 insertions(+), 40 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index d87f82b0982..96288c47f1f 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -918,46 +918,58 @@ lower_silu(struct rkt_ml_subgraph *subgraph, struct rkt_operation *host,
+    host->output_index = out->index;
+    host->output_zero_point = out->zero_point;
+    host->output_scale = out->scale;
++}
+ 
+-   float s_acc = host->input_scale * host->weights_scale;
+-   host->lut_scale = RKT_LUT_SCALE;
++/* The LUT domain of the job, chosen once every SiLU host has its final
++ * output quantization (concat / quantize retargets change it): the LUT
++ * output is 16 bits and holds 2 * silu(x) in LUT units, so the unit must
++ * scale with the largest value any SiLU layer of the job can produce
++ * (x_max = (255 - zp) * s_out over the hosts; a layer quantized at 0.68
++ * per LSB wants x up to 172, a fixed [-8, 8) domain saturated there).
++ * x_max / 8192 keeps x_lut within 16 bits up to 4 * x_max and leaves a
++ * table entry (32 units) at x_max / 256.  Then per host: BN multiplier
++ * x_lut = acc * mul >> shift, and the shared tables in the hardware
++ * framing (entry i at word i, the two trailing words repeat the last
++ * entry). */
++static void
++finalize_silu(struct rkt_ml_subgraph *subgraph)
++{
++   float x_max = 0.0f;
++   util_dynarray_foreach (&subgraph->operations, struct rkt_operation, op)
++      if (op->silu)
++         x_max = MAX2(x_max, (255 - (int)op->output_zero_point) * op->output_scale);
++   if (x_max == 0.0f)
++      return;
++   float lut_scale = MAX2(x_max, 1.0f) / 8192.0f;
+ 
+-   /* x_lut = acc * mul >> shift with a 15-bit multiplier. */
+-   float r = s_acc / host->lut_scale;
+-   unsigned e = 0;
+-   while (r * (float)(1u << e) < 16384.0f && e < 30)
+-      e++;
+-   host->lut_mul = MIN2((unsigned)lrintf(r * (float)(1u << e)), 32767);
+-   host->lut_shift = e;
++   util_dynarray_foreach (&subgraph->operations, struct rkt_operation, op) {
++      if (!op->silu)
++         continue;
++      float s_acc = op->input_scale * op->weights_scale;
++      float r = s_acc / lut_scale;
++      unsigned e = 0;
++      while (r * (float)(1u << e) < 16384.0f && e < 30)
++         e++;
++      op->lut_scale = lut_scale;
++      op->lut_mul = MIN2((unsigned)lrintf(r * (float)(1u << e)), 32767);
++      op->lut_shift = e;
++   }
+ 
+    /* The LO table's first entries misbehave (RE-LOG Test 75: for x in
+     * [LO_START, LO_START + ~160) the unit returns LO[512] * (x + 8) / 256
+     * instead of the entries), so the LO domain starts at -512, inside
+     * the LE range, and LUT_CFG gives LE priority in the overlap. */
+-   for (unsigned i = 0; i < 513; i++) {
+-      float xle = (-16384.0f + 32.0f * i) * host->lut_scale;
+-      float xlo = (RKT_LUT_LO_START + 32.0f * i) * host->lut_scale;
+-      host->lut_le[i] = CLAMP(lrintf(2.0f * silu_f(xle) / host->lut_scale),
+-                              -32768, 32767);
+-      host->lut_lo[i] = CLAMP(lrintf(2.0f * silu_f(xlo) / host->lut_scale),
+-                              -32768, 32767);
+-   }
+-
+-   /* The job's LUT payload: entry i at word i (the unit indexes the
+-    * table by (x - START) >> 5 straight into the word array; the
+-    * vendor's leading zero word puts every entry one bin late, which
+-    * costs it ~1.3 LSB on the steep positive branch), the two trailing
+-    * words repeat the last entry. */
+-   if (!subgraph->has_lut) {
+-      const int16_t *tabs[2] = {host->lut_le, host->lut_lo};
+-      for (unsigned t = 0; t < 2; t++) {
+-         uint16_t *w = &subgraph->lut_words[t * 515];
+-         for (unsigned i = 0; i < 513; i++)
+-            w[i] = (uint16_t)tabs[t][i];
+-         w[513] = w[514] = (uint16_t)tabs[t][512];
++   for (unsigned t = 0; t < 2; t++) {
++      uint16_t *w = &subgraph->lut_words[t * 515];
++      for (unsigned i = 0; i < 513; i++) {
++         float x = (t == 0 ? -16384.0f + 32.0f * i
++                           : RKT_LUT_LO_START + 32.0f * i) * lut_scale;
++         int v = CLAMP(lrintf(2.0f * silu_f(x) / lut_scale), -32768, 32767);
++         w[i] = (uint16_t)(int16_t)v;
+       }
+-      subgraph->has_lut = true;
++      w[513] = w[514] = w[512];
+    }
++   subgraph->has_lut = true;
+ }
+ 
+ /* RKT_NO_CHAIN reverts to one job per operation -- except when the graph
+@@ -1361,6 +1373,20 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+       }
+    }
+ 
++   finalize_silu(subgraph);
++
++   if (getenv("RKT_OPS")) {
++      unsigned n = 0;
++      util_dynarray_foreach (&subgraph->operations, struct rkt_operation, op)
++         fprintf(stderr, "rkt op %u: in %u+%u (C%u of %u, s %.4g zp %u) -> out %u+%u (C%u %ux%u s %.4g zp %u) k%u s%u%s%s%s add %d+%u\n",
++                 n++, op->input_index, op->src_offset, op->input_channels, op->src_channels,
++                 op->input_scale, op->input_zero_point, op->output_index, op->dst_offset,
++                 op->output_channels, op->output_width, op->output_height, op->output_scale,
++                 op->output_zero_point, op->weights_width, op->stride,
++                 op->silu ? " silu" : "", op->is_pool ? " pool" : "", op->is_upsample ? " up" : "",
++                 op->add_tensor, op->add_src_offset);
++   }
++
+    /* Create input tensors */
+    util_dynarray_foreach (&subgraph->operations, struct rkt_operation,
+                           operation) {
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index ecb055fa144..6522e009b01 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -20,13 +20,9 @@
+ /* RK3568 (RE 2026-08-22): 8 banks of 32 KiB, 32-byte entries (1024 per
+  * bank).  Verified against all 51 mobilenet_v1 vendor tasks: data banks =
+  * ceil(entries_per_slice * H / 1024), weight banks = 8 - data banks. */
+-/* One DPU LUT domain for every SiLU layer: x in [-8, 8) real, one LUT
+- * unit = 1/2048, 32 units per table entry, y = 2 * silu(x) in LUT units
+- * (32767 at 8.0; beyond that the LO overflow slope continues y = 2x,
+- * below -8 silu is 0 to well under an output LSB).  The LO table starts
+- * inside the LE range because its first entries misbehave (RE-LOG
+- * Test 75). */
+-#define RKT_LUT_SCALE    (1.0f / 2048.0f)
++/* One DPU LUT domain per job (finalize_silu): 32 units per table entry,
++ * y = 2 * silu(x) in LUT units.  The LO table starts inside the LE range
++ * because its first entries misbehave (RE-LOG Test 75). */
+ #define RKT_LUT_LO_START (-512)
+ 
+ #define CBUF_BANK_SIZE        32768
+@@ -197,8 +193,6 @@ struct rkt_operation {
+     * x_lut = acc * lut_mul >> lut_shift. */
+    unsigned lut_mul;
+    unsigned lut_shift;
+-   int16_t lut_le[513];
+-   int16_t lut_lo[513];
+ };
+ 
+ /* Dimensions of a concatenation output tensor.  Several operations then
+-- 
+2.53.0
+
+
+From 5f59f4f067a8d84a1482ddc08054c87556bf6979 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 19:07:03 +0300
+Subject: [PATCH 48/49] rocket: keep the CPU mapping of a BO for its lifetime
+
+A transfer_map did a fresh mmap every time (and never unmapped it):
+a page-fault sweep per invoke, ~0.3 ms on the 320x320x3 yolo input and
+as much again on the outputs.  Map once on first use, unmap on destroy.
+yolov8n_int8: 16.3 -> 15.6 ms.
+---
+ src/gallium/drivers/rocket/rkt_device.c | 15 +++++++++++----
+ src/gallium/drivers/rocket/rkt_device.h |  4 ++++
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_device.c b/src/gallium/drivers/rocket/rkt_device.c
+index 8da0157ada8..3fe6243ce89 100644
+--- a/src/gallium/drivers/rocket/rkt_device.c
++++ b/src/gallium/drivers/rocket/rkt_device.c
+@@ -74,13 +74,16 @@ rkt_buffer_map(struct pipe_context *pctx,
+    ret = drmIoctl(screen->fd, DRM_IOCTL_ROCKET_PREP_BO, &arg);
+    assert(ret != -1);
+ 
+-   uint8_t *map = os_mmap(NULL, prsc->width0, PROT_READ | PROT_WRITE, MAP_SHARED,
+-                          screen->fd, rsc->fake_offset);
+-   assert(map != MAP_FAILED);
++   if (rsc->cpu_map == NULL) {
++      void *map = os_mmap(NULL, prsc->width0, PROT_READ | PROT_WRITE,
++                          MAP_SHARED, screen->fd, rsc->fake_offset);
++      assert(map != MAP_FAILED);
++      rsc->cpu_map = map;
++   }
+ 
+    *out_transfer = transfer;
+ 
+-   return map + box->x;
++   return (uint8_t *)rsc->cpu_map + box->x;
+ }
+ 
+ static void
+@@ -169,6 +172,7 @@ rkt_resource_create(struct pipe_screen *pscreen,
+       void *map = os_mmap(NULL, arg.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                           screen->fd, rsc->fake_offset);
+       memset(map, 0, arg.size);
++      rsc->cpu_map = map;
+    }
+ 
+    return &rsc->base;
+@@ -189,6 +193,9 @@ rkt_resource_destroy(struct pipe_screen *pscreen,
+ 
+    arg.handle = rsc->handle;
+ 
++   if (rsc->cpu_map)
++      os_munmap(rsc->cpu_map, rsc->bo_size);
++
+    ret = drmIoctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &arg);
+    assert(ret >= 0);
+ 
+diff --git a/src/gallium/drivers/rocket/rkt_device.h b/src/gallium/drivers/rocket/rkt_device.h
+index 428750e9da7..056e6768b77 100644
+--- a/src/gallium/drivers/rocket/rkt_device.h
++++ b/src/gallium/drivers/rocket/rkt_device.h
+@@ -80,6 +80,10 @@ struct rkt_resource {
+    uint64_t obj_addr;
+    uint64_t fake_offset;
+    uint64_t bo_size;
++   /* CPU mapping, made on first map and kept for the BO's lifetime: a
++    * fresh mmap per transfer cost a page-fault sweep per invoke (~1 ms
++    * on a 320x320x3 input) and was never unmapped. */
++   void *cpu_map;
+ };
+ 
+ static inline struct rkt_resource *
+-- 
+2.53.0
+
+
+From 7b1bb194076cb611e3eb2441a2e6d876974eeabf Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 19:26:14 +0300
+Subject: [PATCH 49/49] rocket/teflon: fold the graph-input and graph-output
+ layout ops into packing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+yolo exports take a float NCHW image and hand back planar CHW tensors:
+QUANTIZE(float->int8) + TRANSPOSE(0,2,3,1) at the input and
+TRANSPOSE(0,3,1,2) + RESHAPE(rank<4) at every output ran on the CPU
+between the delegate and the user buffers (~1.5 ms on the A55 for
+yolov8n).  Both pairs are views now:
+
+- teflon flags the pairs (input_pack / nchw_export on
+  pipe_ml_operation); without a plan (partition_init) the flags are
+  decided from the node alone, so an accepted float->int8 QUANTIZE is
+  always the input pattern and a requantizing one never is;
+- the input pack reads the float NCHW buffer, quantizes with the
+  consumer's scale/zero point and interleaves the channels (NEON for
+  the C=3 ARGB case: 16 pixels per step);
+- the output unpack writes each channel as a contiguous plane.
+
+A delegation window that cuts a partition down to views only (no
+convolution) runs nothing rather than crashing.
+
+yolov8n: 15.6 -> 14.9 ms, detections unchanged; probes ≤1 LSB.
+---
+ src/gallium/drivers/rocket/rkt_ml.c       | 151 +++++++++++++++++++++-
+ src/gallium/drivers/rocket/rkt_ml.h       |  11 ++
+ src/gallium/frontends/teflon/tfl_device.c | 103 +++++++++++++++
+ src/gallium/include/pipe/p_state.h        |  15 +++
+ 4 files changed, 276 insertions(+), 4 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 96288c47f1f..eb2840ce61a 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -33,6 +33,9 @@ prof_on(void)
+ 
+ #include "rkt_coefs.h"
+ #include "rkt_ml.h"
++#ifdef __aarch64__
++#include <arm_neon.h>
++#endif
+ #include "rkt_regcmd.h"
+ #include "rkt_task.h"
+ 
+@@ -245,6 +248,13 @@ resolve_views(struct rkt_ml_subgraph *subgraph, struct rkt_operation *op)
+    struct rkt_view *v;
+ 
+    while ((v = find_view(subgraph, op->input_index)) != NULL) {
++      assert(!v->nchw);
++      if (v->input_float || v->input_nchw) {
++         op->input_float |= v->input_float;
++         op->input_nchw |= v->input_nchw;
++         op->input_index = v->src_index;
++         continue;
++      }
+       if (v->is_pad) {
+          op->input_width = v->src_width;
+          op->input_height = v->src_height;
+@@ -633,8 +643,17 @@ rkt_ml_operation_supported(struct pipe_ml_device *pdevice,
+       if (operation->input_tensors[k]->data == NULL &&
+           operation->input_tensors[k]->dims_count != 4)
+          return false;
++   if (operation->input_pack) {
++      /* Graph-input quantize/transpose folded into the input packing. */
++      supported = operation->type == PIPE_ML_OPERATION_TYPE_QUANTIZE
++                     ? operation->output_tensors[0]->type_size == 1 &&
++                          tensor_quantization_supported(operation->output_tensors[0])
++                     : operation->input_tensors[0]->type_size == 1;
++      return supported;
++   }
+    for (unsigned k = 0; k < operation->output_count; k++)
+-      if (operation->output_tensors[k]->dims_count != 4)
++      if (operation->output_tensors[k]->dims_count != 4 &&
++          !operation->nchw_export)
+          return false;
+    /* The CNA/CORE width and height fields are 11 bits (DATAIN_WIDTH,
+     * DATAOUT_WIDTH ...): yolo's DFL convolution over a 4x2100 map came
+@@ -740,6 +759,14 @@ rkt_ml_operation_supported(struct pipe_ml_device *pdevice,
+                   in->scale == out->scale && in->zero_point == out->zero_point;
+       break;
+    }
++   case PIPE_ML_OPERATION_TYPE_TRANSPOSE:
++   case PIPE_ML_OPERATION_TYPE_RESHAPE:
++      /* Only the NHWC -> planar CHW export pair (teflon establishes it);
++       * the readback writes that layout directly. */
++      supported = operation->nchw_export &&
++                  operation->input_tensors[0]->type_size == 1 &&
++                  tensor_quantization_supported(operation->input_tensors[0]);
++      break;
+    case PIPE_ML_OPERATION_TYPE_RESIZE: {
+       /* Nearest-neighbour 2x (yolo's neck upsamples): DPU unpooling. */
+       const struct pipe_tensor *in = operation->input_tensors[0];
+@@ -1294,6 +1321,40 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+          util_dynarray_append(&subgraph->operations, operation);
+          break;
+       }
++      case PIPE_ML_OPERATION_TYPE_QUANTIZE:
++      case PIPE_ML_OPERATION_TYPE_TRANSPOSE:
++      case PIPE_ML_OPERATION_TYPE_RESHAPE:
++         if (poperations[i].input_pack) {
++            const struct pipe_ml_operation *pi = &poperations[i];
++            struct rkt_view v = {
++               .index = pi->output_tensors[0]->index,
++               .src_index = pi->input_tensors[0]->index,
++               .input_float = pi->type == PIPE_ML_OPERATION_TYPE_QUANTIZE,
++               .input_nchw = pi->type == PIPE_ML_OPERATION_TYPE_TRANSPOSE,
++            };
++            util_dynarray_append(&subgraph->views, v);
++            break;
++         }
++         if (poperations[i].type == PIPE_ML_OPERATION_TYPE_QUANTIZE)
++            goto quantize;
++      /* fallthrough */
++      {
++         /* NCHW export pair: the RESHAPE is a pass-through view, the
++          * TRANSPOSE marks the layout. */
++         const struct pipe_ml_operation *pt = &poperations[i];
++         bool tr = pt->type == PIPE_ML_OPERATION_TYPE_TRANSPOSE;
++         /* Only the TRANSPOSE sees the NHWC tensor: its dims[3] is the
++          * channel count; the RESHAPE's input is already CHW. */
++         struct rkt_view v = {
++            .index = pt->output_tensors[0]->index,
++            .src_index = pt->input_tensors[0]->index,
++            .nchw = tr,
++            .channels = tr ? pt->input_tensors[0]->dims[3] : 0,
++            .src_channels = tr ? pt->input_tensors[0]->dims[3] : 0,
++         };
++         util_dynarray_append(&subgraph->views, v);
++         break;
++      }
+       case PIPE_ML_OPERATION_TYPE_STRIDED_SLICE: {
+          const struct pipe_ml_operation *ps = &poperations[i];
+          struct rkt_view v = {
+@@ -1323,7 +1384,7 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+          util_dynarray_append(&subgraph->views, v);
+          break;
+       }
+-      case PIPE_ML_OPERATION_TYPE_QUANTIZE: {
++      quantize: {
+          const struct pipe_ml_operation *pq = &poperations[i];
+          const struct pipe_tensor *in = pq->input_tensors[0];
+          const struct pipe_tensor *out = pq->output_tensors[0];
+@@ -1506,6 +1567,10 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+    DBG("Processing input\n");
+    double t0 = prof_ms();
+ 
++   /* Nothing but views (see subgraph_create): nothing to run. */
++   if (!util_dynarray_num_elements(&subgraph->operations, struct rkt_operation))
++      return;
++
+    for (int i = 0; i < inputs_count; i++) {
+       struct rkt_operation *operation =
+          find_first_consumer(subgraph, input_idxs[i]);
+@@ -1526,6 +1591,12 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          }
+       }
+ 
++      /* A partition of nothing but views (a delegation window cut
++       * between a graph-input QUANTIZE/TRANSPOSE and its convolution)
++       * has no consumer to pack for. */
++      if (operation == NULL)
++         continue;
++
+       struct pipe_resource *input =
+          &rkt_get_tensor(subgraph, input_idxs[i])->base;
+       unsigned input_channels =
+@@ -1556,6 +1627,54 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          struct pipe_transfer *transfer_out;
+          /* NHWC user memory: [height (dims[1])][width (dims[2])][C]. */
+          uint8_t(*input_in)[input_width][input_channels] = inputs[i];
++         /* A float NCHW graph input (yolo exports): quantize and
++          * transpose on the way in instead of two CPU ops. */
++         uint8_t *fbuf = NULL;
++         if (operation->input_float || operation->input_nchw) {
++            unsigned px = input_width * input_height;
++            fbuf = malloc(px * input_channels);
++            const float *ff = inputs[i];
++            const uint8_t *bb = inputs[i];
++            float inv = 1.0f / operation->input_scale;
++            unsigned p0 = 0;
++#ifdef __aarch64__
++            if (operation->input_float && operation->input_nchw &&
++                input_channels == 3) {
++               /* 16 pixels per step: three planes -> interleaved RGB. */
++               const float32x4_t vinv = vdupq_n_f32(inv);
++               const float32x4_t vzp = vdupq_n_f32((float)operation->input_zero_point);
++               for (; p0 + 16 <= px; p0 += 16) {
++                  uint8x16x3_t rgb;
++                  for (unsigned c = 0; c < 3; c++) {
++                     const float *fp = ff + c * px + p0;
++                     uint16x8_t lo, hi;
++                     #define Q4(k) vqmovun_s32(vcvtnq_s32_f32( \
++                        vmlaq_f32(vzp, vld1q_f32(fp + 4 * (k)), vinv)))
++                     lo = vcombine_u16(Q4(0), Q4(1));
++                     hi = vcombine_u16(Q4(2), Q4(3));
++                     #undef Q4
++                     rgb.val[c] = vcombine_u8(vqmovn_u16(lo), vqmovn_u16(hi));
++                  }
++                  vst3q_u8(fbuf + p0 * 3, rgb);
++               }
++            }
++#endif
++            for (unsigned c = 0; c < input_channels; c++) {
++               for (unsigned p = p0; p < px; p++) {
++                  unsigned si = operation->input_nchw ? c * px + p : p * input_channels + c;
++                  uint8_t q;
++                  if (operation->input_float) {
++                     float r = ff[si] * inv + (float)operation->input_zero_point;
++                     q = (uint8_t)CLAMP(lrintf(r), 0, 255);
++                  } else {
++                     q = bb[si] ^ fold;
++                  }
++                  fbuf[p * input_channels + c] = q;
++               }
++            }
++            input_in = (void *)fbuf;
++            fold = 0;
++         }
+          uint8_t *map = pipe_buffer_map(pcontext, &input_tensor->base,
+                                         PIPE_MAP_WRITE, &transfer_out);
+ 
+@@ -1632,6 +1751,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+             }
+          }
+ 
++         free(fbuf);
+          if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS))
+             rkt_dump_buffer(map, "input", 0, input_idxs[i], 0,
+                             pipe_buffer_size(&input_tensor->base));
+@@ -1906,6 +2026,9 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+ {
+    struct rkt_ml_subgraph *subgraph = (struct rkt_ml_subgraph *)(psubgraph);
+ 
++   if (!util_dynarray_num_elements(&subgraph->operations, struct rkt_operation))
++      return;
++
+    DBG("Processing output\n");
+    double tw = 0, tu = 0, tstart = prof_ms();
+ 
+@@ -1913,13 +2036,16 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+       unsigned idx = output_idxs[i];
+       unsigned ch_off = 0, view_channels = 0;
+       struct rkt_view *v;
++      bool nchw = false;
+ 
+       /* A partition output that is a channel slice of a tensor: read
+-       * the source at the surface offset. */
++       * the source at the surface offset; an NCHW export: write the
++       * planar layout. */
+       while ((v = find_view(subgraph, idx)) != NULL) {
+          assert(!v->is_pad);
+          ch_off += v->ch_off;
+-         if (!view_channels)
++         nchw |= v->nchw;
++         if (!view_channels && v->channels)
+             view_channels = v->channels;
+          idx = v->src_index;
+       }
+@@ -2002,6 +2128,23 @@ rkt_ml_subgraph_read_outputs(struct pipe_context *pcontext,
+             unsigned c0 = g * 8;
+             unsigned nc = MIN2(8u, out_c - c0);
+             const uint64_t *src64 = (const uint64_t *)(raw + g * surf);
++            if (nchw) {
++               /* Planar: channel c of surface g is a contiguous plane. */
++               for (unsigned p = 0; p < px; p++) {
++                  uint64_t v = src64[p];
++                  for (unsigned c = 0; c < nc; c++) {
++                     uint8_t q = (uint8_t)(v >> (8 * c)) + 0x80;
++                     if (requant) {
++                        float r = (float)operation->orig_output_zero_point +
++                                  ((int)q - (int)operation->output_zero_point) *
++                                     rq_scale;
++                        q = (uint8_t)CLAMP(lrintf(r), 0, 255);
++                     }
++                     ubuf[(c0 + c) * px + p] = q ^ fold;
++                  }
++               }
++               continue;
++            }
+             uint8_t *dst = ubuf + c0;
+             for (unsigned p = 0; p < px; p++, dst += out_c) {
+                uint64_t v = src64[p];
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index 6522e009b01..be496a3c29c 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -172,6 +172,10 @@ struct rkt_operation {
+     * src_channels channels, of which input_channels are consumed. */
+    unsigned src_offset;
+    unsigned src_channels;
++   /* The input is read straight from the user's float NCHW buffer and
++    * quantized with input_scale / input_zero_point while packing. */
++   bool input_float;
++   bool input_nchw;
+    /* A QUANTIZE folded into this producer: the tensor it used to write
+     * and that tensor's quantization, so a partition output that still
+     * wants the old tensor can be requantized on the CPU. */
+@@ -213,6 +217,13 @@ struct rkt_view {
+    unsigned index;
+    unsigned src_index;
+    bool is_pad;
++   /* An NHWC tensor exported as planar CHW (TRANSPOSE 0,3,1,2 +
++    * RESHAPE): resolved only by read_outputs. */
++   bool nchw;
++   /* Graph input arriving as float NCHW: the consumer packs from it
++    * (QUANTIZE float->int8 and TRANSPOSE 0,2,3,1 folded in). */
++   bool input_float;
++   bool input_nchw;
+    /* slice */
+    unsigned ch_off;
+    unsigned channels;
+diff --git a/src/gallium/frontends/teflon/tfl_device.c b/src/gallium/frontends/teflon/tfl_device.c
+index 27b8e71e83f..9c74ecc404c 100644
+--- a/src/gallium/frontends/teflon/tfl_device.c
++++ b/src/gallium/frontends/teflon/tfl_device.c
+@@ -53,6 +53,101 @@ tensor_consumers(TfLiteContext *ctx, TfLiteIntArray *plan, int tensor)
+    return count;
+ }
+ 
++/* TRANSPOSE(0,3,1,2) -> RESHAPE(rank < 4): an NHWC tensor exported as
++ * planar CHW (yolo detection heads).  True for the TRANSPOSE when its
++ * only reader is such a RESHAPE, and for the RESHAPE when its input is
++ * such a TRANSPOSE. */
++static bool
++nchw_export_pattern(TfLiteContext *ctx, TfLiteIntArray *plan, TfLiteNode *node,
++                    TfLiteRegistration *reg)
++{
++   TfLiteNode *n;
++   TfLiteRegistration *r;
++
++   if (plan == NULL)
++      return true;
++   if (reg->builtin_code == kTfLiteBuiltinTranspose) {
++      int *perm = ctx->tensors[node->inputs->data[1]].data.data;
++      TfLiteTensor *in = &ctx->tensors[node->inputs->data[0]];
++      if (in->dims->size != 4 || perm[0] != 0 || perm[1] != 3 ||
++          perm[2] != 1 || perm[3] != 2)
++         return false;
++      int out = node->outputs->data[0];
++      if (tensor_consumers(ctx, plan, out) != 1)
++         return false;
++      for (int i = 0; i < plan->size; i++) {
++         ctx->GetNodeAndRegistration(ctx, plan->data[i], &n, &r);
++         for (int j = 0; j < n->inputs->size; j++)
++            if (n->inputs->data[j] == out)
++               return r->builtin_code == kTfLiteBuiltinReshape &&
++                      ctx->tensors[n->outputs->data[0]].dims->size < 4;
++      }
++      return false;
++   }
++   if (reg->builtin_code == kTfLiteBuiltinReshape) {
++      if (ctx->tensors[node->outputs->data[0]].dims->size >= 4)
++         return false;
++      if (tensor_producer(ctx, plan, node->inputs->data[0], &n, &r) < 0)
++         return false;
++      return r->builtin_code == kTfLiteBuiltinTranspose &&
++             nchw_export_pattern(ctx, plan, n, r);
++   }
++   return false;
++}
++
++/* QUANTIZE(float -> int8) -> TRANSPOSE(0,2,3,1) at the graph input
++ * (yolo exports take a float NCHW image): true for the QUANTIZE whose
++ * only reader is such a TRANSPOSE, and for that TRANSPOSE. */
++static bool
++input_pack_pattern(TfLiteContext *ctx, TfLiteIntArray *plan, TfLiteNode *node,
++                   TfLiteRegistration *reg)
++{
++   TfLiteNode *n;
++   TfLiteRegistration *r;
++
++   if (getenv("TEFLON_NO_INPACK"))
++      return false;
++   if (reg->builtin_code == kTfLiteBuiltinQuantize) {
++      TfLiteTensor *in = &ctx->tensors[node->inputs->data[0]];
++      TfLiteTensor *out = &ctx->tensors[node->outputs->data[0]];
++      if (in->type != kTfLiteFloat32 || out->type != kTfLiteInt8 ||
++          in->dims->size != 4)
++         return false;
++      /* partition_init has no plan: only accepted nodes get here, and
++       * a float -> int8 QUANTIZE is accepted only through this pattern. */
++      if (plan == NULL)
++         return true;
++      if (tensor_producer(ctx, plan, node->inputs->data[0], &n, &r) >= 0)
++         return false;
++      int o = node->outputs->data[0];
++      if (tensor_consumers(ctx, plan, o) != 1)
++         return false;
++      for (int i = 0; i < plan->size; i++) {
++         ctx->GetNodeAndRegistration(ctx, plan->data[i], &n, &r);
++         for (int j = 0; j < n->inputs->size; j++)
++            if (n->inputs->data[j] == o) {
++               if (r->builtin_code != kTfLiteBuiltinTranspose)
++                  return false;
++               int *perm = ctx->tensors[n->inputs->data[1]].data.data;
++               return perm[0] == 0 && perm[1] == 2 && perm[2] == 3 && perm[3] == 1;
++            }
++      }
++      return false;
++   }
++   if (reg->builtin_code == kTfLiteBuiltinTranspose) {
++      int *perm = ctx->tensors[node->inputs->data[1]].data.data;
++      if (!(perm[0] == 0 && perm[1] == 2 && perm[2] == 3 && perm[3] == 1))
++         return false;
++      if (plan == NULL)
++         return true;
++      if (tensor_producer(ctx, plan, node->inputs->data[0], &n, &r) < 0)
++         return false;
++      return r->builtin_code == kTfLiteBuiltinQuantize &&
++             input_pack_pattern(ctx, plan, n, r);
++   }
++   return false;
++}
++
+ /* CONV -> LOGISTIC -> MUL(conv_out, logistic_out) is x * sigmoid(x)
+  * (SiLU), the activation of the yolo family.  Given the LOGISTIC node
+  * (or the MUL node, with mul_node set), check that the pattern holds
+@@ -375,6 +470,8 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
+ 
+       operation->type = PIPE_ML_OPERATION_TYPE_RESHAPE;
+       memcpy(operation->reshape.shape, shape, 4 * sizeof(*operation->reshape.shape));
++      operation->nchw_export =
++         nchw_export_pattern(tf_context, delegate->plan, node, node_registration);
+       break;
+    }
+    case kTfLiteBuiltinLeakyRelu: {
+@@ -409,6 +506,10 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
+ 
+       operation->type = PIPE_ML_OPERATION_TYPE_TRANSPOSE;
+       memcpy(operation->transpose.perm, perm, 4 * sizeof(*operation->transpose.perm));
++      operation->nchw_export =
++         nchw_export_pattern(tf_context, delegate->plan, node, node_registration);
++      operation->input_pack =
++         input_pack_pattern(tf_context, delegate->plan, node, node_registration);
+       break;
+    }
+    case kTfLiteBuiltinSlice: {
+@@ -463,6 +564,8 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
+    }
+    case kTfLiteBuiltinQuantize: {
+       operation->type = PIPE_ML_OPERATION_TYPE_QUANTIZE;
++      operation->input_pack =
++         input_pack_pattern(tf_context, delegate->plan, node, node_registration);
+       break;
+    }
+    default:
+diff --git a/src/gallium/include/pipe/p_state.h b/src/gallium/include/pipe/p_state.h
+index 030865572f0..ff4d0436f53 100644
+--- a/src/gallium/include/pipe/p_state.h
++++ b/src/gallium/include/pipe/p_state.h
+@@ -1103,6 +1103,21 @@ struct pipe_ml_operation
+     */
+    bool silu_pattern;
+ 
++   /**
++    * For TRANSPOSE and RESHAPE: TRANSPOSE(0,3,1,2) whose only reader is
++    * a RESHAPE to a lower rank (or the RESHAPE itself), i.e. an NHWC
++    * result leaving the graph as planar CHW.  A driver can produce that
++    * layout when it reads its outputs back instead of running the ops.
++    */
++   bool nchw_export;
++
++   /**
++    * For QUANTIZE (float -> int8) and TRANSPOSE(0,2,3,1) on a graph
++    * input: the model takes a float NCHW image; a driver that packs its
++    * input itself can quantize and transpose on the way in.
++    */
++   bool input_pack;
++
+    /**
+     * Tensor used as input.
+     */
 -- 
 2.53.0
 

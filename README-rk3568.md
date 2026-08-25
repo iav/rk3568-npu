@@ -39,8 +39,13 @@ teflon (TFLite delegate)
           graph is ONE drm_rocket_job; the PC unit walks the chain and
           raises a single interrupt (last_int_mask, uapi extension).
   └─ rkt_ml_subgraph_invoke()               rkt_ml.c
-       packs the input into 8-channel surfaces, submits, waits
+       packs the input into 8-channel surfaces (quantizing a float NCHW
+       graph input on the way), submits, waits
   └─ rkt_ml_subgraph_read_outputs()         unpacks the output surfaces
+       (NHWC, or planar CHW when the export's TRANSPOSE+RESHAPE was folded)
+  Views (rkt_view): SLICE / PAD / QUANTIZE / the layout pairs above are
+  not operations but addressing resolved into the consumer or the
+  pack/unpack (resolve_views).
 ```
 
 BO lists of the job: `in` = tensors with no producer inside the
@@ -135,6 +140,9 @@ Knobs (all environment variables, read by the delegate):
 | `RKT_MULSH=<n>` | shift the OUT_CVT scale by n — separates scale errors from addressing errors |
 | `RKT_MAXROWS=<n>` | cap the band height — forces multi-band pipelines on small probes |
 | `RKT_POOL_INT_MASK=<m>` | interrupt mask of the last PPU task |
+| `RKT_PROF=1` | per-invoke phase timing (pack / submit / wait / unpack) |
+| `RKT_OPS=1` | dump the lowered operations (geometry, scales, LUT domain) |
+| `TEFLON_NO_INPACK=1` | leave the graph-input QUANTIZE/TRANSPOSE to the CPU |
 | `RKT_TASKS=1` | print every operation's band split (top/bottom slice, pads, output rows) |
 | `ROCKET_DEBUG=dump_bos` | dump every BO (weights, biases, regcmd, tensors) to files |
 | `TEFLON_MAX_OPS` / `TEFLON_MIN_OPS` | delegate a window of graph nodes |

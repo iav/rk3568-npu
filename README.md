@@ -13,17 +13,17 @@ Status (2026-08-25, night):
   CPU reference within 1 LSB across uniform fills, row/column
   gradients, channel-coded and mixed inputs;
 - full mobilenet_v1 (224×224 quant) runs on the NPU — convolutions,
-  depthwise, the FC-shaped final layer and average pooling: ~5.6 ms vs
+  depthwise, the FC-shaped final layer and average pooling: ~5.4 ms vs
   117 ms CPU-only on the same board (~21×), top-5 matching the CPU
   reference, mean absolute logit difference 0.03, bit-identical results
   across repeated runs;
 - full mobilenet_v2 (224×224 quant) runs as well, including all ten
-  fused residual additions: ~6.4 ms vs 76 ms CPU-only (~12×), top-5
+  fused residual additions: ~6.3 ms vs 76 ms CPU-only (~12×), top-5
   matching the CPU reference including order, mean absolute logit
   difference 0.82, bit-identical across runs;
 - resnet18 (224×224 quant) runs end-to-end in a single NPU partition —
   convolutions, residual adds, both poolings and the final
-  FULLY_CONNECTED layer: ~10.8 ms vs 345 ms CPU-only (~32×), max pooling
+  FULLY_CONNECTED layer: ~11.2 ms vs 345 ms CPU-only (~32×), max pooling
   and global average pooling executed by the NPU's dedicated PPU unit;
 - channel CONCATENATION is delegated as pure addressing (each input's
   producer writes its own slice of the output buffer), with an identity
@@ -45,15 +45,18 @@ Status (2026-08-25, night):
   the first table (RE-LOG Test 75);
 - **yolov8n_int8 (320x320) runs end to end**: the backbone, neck (the
   nearest-neighbour upsamples run on the DPU in its unpooling mode) and
-  the three detection heads on the NPU in two partitions; only the input
-  quantize/transpose and the [1, 84, 2100] DFL tail stay on the CPU.  On
-  bus.jpg the NPU produces the same five detections as the CPU (boxes,
-  classes, scores; raw output mean diff 3e-4): **18 ms vs 70 ms**
-  CPU-only (XNNPACK, four A55).  C2f's channel SLICE, the
+  the three detection heads on the NPU in two partitions; only the
+  [1, 84, 2100] DFL tail stays on the CPU.  On bus.jpg the NPU produces
+  the same five detections as the CPU (boxes, classes, scores; raw
+  output mean diff 3e-4): **14.9 ms vs 70 ms** CPU-only (XNNPACK, four
+  A55), of which the NPU itself takes 8 ms.  C2f's channel SLICE, the
   int8->int8 QUANTIZE on concat legs and the explicit PAD before
   stride-2 convolutions are handled as addressing / producer
-  retargeting, with no copies (`tests/yolo_cmp.py`, RE-LOG Test 76); a depthwise host reads the second
-  operand with the wrong surface walk and is never chosen;
+  retargeting, with no copies; the float NCHW input is quantized and
+  transposed while packing and the outputs are written planar, so the
+  export's QUANTIZE/TRANSPOSE/RESHAPE never run on the CPU
+  (`tests/yolo_cmp.py`, RE-LOG Tests 76–78); a depthwise host reads the
+  second operand with the wrong surface walk and is never chosen;
 - the MAC array runs at 800 MHz (the vendor's own RK3568 operating
   point; the driver default used to be 600 MHz — see the `scmi_rate`
   module parameter below), stress-tested for an hour with bit-identical
