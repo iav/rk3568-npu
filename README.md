@@ -5,7 +5,7 @@ components: the mainline `accel/rocket` kernel driver (with local fixes)
 and a Mesa Teflon (TFLite delegate) branch. No librknnrt, no vendor
 runtime.
 
-Status (2026-08-25):
+Status (2026-08-25, evening):
 
 - single-operation probe layers (regular, depthwise, stride-2,
   3-channel first layer, fully-connected, concat, standalone add —
@@ -36,7 +36,14 @@ Status (2026-08-25):
   largest channel scale) — this is the format most int8 detection
   models ship in;
 - standalone ADD (no convolution producer inside the partition) runs on
-  a pointwise identity-copy host; a depthwise host reads the second
+  a pointwise identity-copy host;
+- SiLU (x * sigmoid(x), TFLite CONV -> LOGISTIC -> MUL) is fused into the
+  convolution through the DPU lookup table, the vendor's ConvExSwish
+  path: probe layers within 2 LSB of the CPU reference, yolov8n_int8
+  delegates all 57 of its SiLU activations.  The tables travel with the
+  job (uapi `lut_data`, see below) and the kernel writes them through
+  MMIO -- loading them from the command stream lands only the first
+  table (RE-LOG Test 75); a depthwise host reads the second
   operand with the wrong surface walk and is never chosen;
 - the MAC array runs at 800 MHz (the vendor's own RK3568 operating
   point; the driver default used to be 600 MHz — see the `scmi_rate`
@@ -144,10 +151,10 @@ Note: if the kernel already auto-loads a `rocket` module from
 a loaded stale build silently keeps the old code. `rmmod` only while the
 NPU is runtime-suspended.
 
-The module and the Mesa branch extend the uapi together (a
-`last_int_mask` field in `struct drm_rocket_job` for the
-single-interrupt chained submit) — build them from matching revisions
-of this repo and the branch below.
+The module and the Mesa branch extend the uapi together (`last_int_mask`
+in `struct drm_rocket_job` for the single-interrupt chained submit,
+`lut_data`/`lut_count` for the DPU lookup tables of SiLU layers) —
+build them from matching revisions of this repo and the branch below.
 
 The MAC-array clock (TF-A PVTPLL via SCMI) defaults to 800 MHz, the
 vendor DT's RK3568 operating point at the same 0.85–0.9 V NPU supply.
@@ -198,10 +205,11 @@ Debug knobs: see the table in `README-rk3568.md` (`RKT_DUMP`, `RKT_WDUMP`,
   with an unsupported concat keeps the whole partition off the NPU.
 - Softmax and reshape are not delegated.
 - Only convolution/depthwise/add/pooling/concat/fully-connected with
-  fused ReLU/ReLU6 (via output saturation); uint8 or int8 activations
-  (per-tensor), per-tensor or per-channel weights. No other
-  activations yet — the vendor stack runs SiLU and friends through a
-  DPU lookup table, which is understood but not implemented.
+  fused ReLU/ReLU6 (via output saturation) or SiLU; uint8 or int8
+  activations (per-tensor), per-tensor or per-channel weights.  Other
+  activations (sigmoid, tanh, hard-swish ...) would take the same LUT
+  path but are not wired up; the LUT is one table per job, so every
+  SiLU layer shares the global domain [-8, 8).
 - Timings above are at the NPU clock pinned to 800 MHz via SCMI;
   "bit-identical" means same board, fixed clock, repeated runs.
 - Debug/rollback knobs: `RKT_NO_CHAIN=1` (per-task submit),

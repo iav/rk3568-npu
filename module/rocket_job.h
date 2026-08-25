@@ -37,6 +37,10 @@ struct rocket_job {
 	 * descriptor array, so the one interrupt that reaches the CPU is
 	 * the last task's. */
 	u32 last_int_mask;
+	/* DPU LUT contents (LE then LO, 515 words each) written through MMIO
+	 * before the job starts; NULL = leave the tables alone. */
+	u16 *lut;
+	u32 lut_count;
 
 	/* Fence to be signaled by drm-sched once its done with the job */
 	struct dma_fence *inference_done_fence;

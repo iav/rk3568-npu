@@ -154,6 +154,21 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 
 	/* TEST (iav RE, 2026-08-22): unit state before each submit --
 	 * S_POINTER bit16 = executer engaged, TASK_STATUS = task counter. */
+	/* DPU lookup tables for the job (SiLU and friends): the LUT is a
+	 * single, non-banked resource behind LUT_ACCESS_CFG (0x4100: bit 17
+	 * write, bit 16 table, [9:0] address) / LUT_ACCESS_DATA (0x4104,
+	 * auto-increment).  Loading it from the command stream is unreliable
+	 * -- only the first DPU-only task of a chain lands its writes (RE-LOG
+	 * Test 75) -- so userspace hands the contents over and they are
+	 * written here, while the unit is idle. */
+	if (job->lut && core->dpu_iomem) {
+		int t, k;
+		for (t = 0; t < 2; t++) {
+			writel(0x20000 | (t << 16), core->dpu_iomem + 0x100);
+			for (k = 0; k < 515; k++)
+				writel(job->lut[t * 515 + k], core->dpu_iomem + 0x104);
+		}
+	}
 	dev_dbg(core->dev,
 		"TEST pre-submit: cna_sp=%08x core_sp=%08x dpu_sp=%08x rdma_sp=%08x task_status=%08x raw=%08x mmu_dte=%08x mmu_status=%08x\n",
 		rocket_cna_readl(core, S_POINTER),
@@ -377,6 +392,7 @@ static void rocket_job_cleanup(struct kref *ref)
 	}
 
 	kvfree(job->tasks);
+	kvfree(job->lut);
 
 	kfree(job);
 }
@@ -834,6 +850,24 @@ static int rocket_ioctl_submit_job(struct drm_device *dev, struct drm_file *file
 
 	rjob->task_desc_addr = job->task_desc_addr;
 	rjob->last_int_mask = job->last_int_mask ?: 0x300;
+
+	if (job->lut_count) {
+		if (job->lut_count != 1030) {
+			ret = -EINVAL;
+			goto out_cleanup_job;
+		}
+		rjob->lut = kvmalloc_array(job->lut_count, sizeof(u16), GFP_KERNEL);
+		if (!rjob->lut) {
+			ret = -ENOMEM;
+			goto out_cleanup_job;
+		}
+		if (copy_from_user(rjob->lut, u64_to_user_ptr(job->lut_data),
+				   job->lut_count * sizeof(u16))) {
+			ret = -EFAULT;
+			goto out_cleanup_job;
+		}
+		rjob->lut_count = job->lut_count;
+	}
 
 	ret = rocket_copy_tasks(dev, file, job, rjob);
 	if (ret)

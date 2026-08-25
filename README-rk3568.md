@@ -23,6 +23,8 @@ teflon (TFLite delegate)
        │    lower_fully_connected  FC -> 1x1 conv over a 1x1 map
        │    lower_identity_copy    1x1 conv with unit weights (concat legs,
        │                           add hosts, pool-first carriers)
+       │    lower_silu             LOGISTIC+MUL folded into the producer conv
+       │                           (DPU LUT path; tables go with the job)
        ├─ rkt_split_tasks()                 rkt_task.c   bands x channel groups
        ├─ rkt_fill_weights / rkt_fill_biases rkt_coefs.c  packed weights, BS stream
        ├─ compile_operation()               rkt_ml.c     one regcmd BO per op
@@ -107,6 +109,9 @@ only with a vendor capture to compare against.
 | kernel: core reset + IOMMU re-arm with `ENABLE_PAGING=0` on the wedge | the ping-pong bank state machine sticks after a timeout; a re-arm with paging on hangs the SoC | 40 |
 | kernel: GFP_DMA32 for page tables and BOs | the NPU addresses 32 bits; no `mem=4G` needed | 58 |
 | MAC clock from SCMI (`scmi_rate`), not the CRU clock | the CRU `npu` clock is decorative; the PVTPLL rate is what the MAC runs at | 67 |
+| DPU LUT tables written by the kernel (uapi `lut_data`), not by DPU-only loader tasks | only the first DPU-only task of a chain lands its LUT_ACCESS_DATA writes; the vendor's two-loader layout loses one table | 75 |
+| LO table domain starts at -512 with `LUT_CFG 0x28` (LE priority in the overlap) | the first ~5 LO entries return LO[512]·(x+8)/256 instead of the table | 75 |
+| BN multiplier shift field = the shift itself; `RKT_MULSH` also scales the BS multiplier | measured with ramp tables at five LUT scales; the knob interplay cost a day of wrong conclusions | 75 |
 
 ## 5. How to debug
 
