@@ -1,7 +1,7 @@
 From b79779acc5f2640ff3bb2b395df03eb2657dd2a3 Mon Sep 17 00:00:00 2001
 From: Midgy BALON <midgy971@gmail.com>
 Date: Tue, 9 Jun 2026 16:27:53 +0200
-Subject: [PATCH 01/49] rocket/teflon: add RK3568 NPU conv config support
+Subject: [PATCH 01/50] rocket/teflon: add RK3568 NPU conv config support
  (Draft)
 
 The Rocket Gallium driver / Teflon delegate currently targets the RK3588 NPU.
@@ -292,7 +292,7 @@ index eee2fe174fa..3c8f1a96bb5 100644
 From 35561c80d7bfdc22224aa8dd0a4be57fd65fd5dd Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 21:21:08 +0300
-Subject: [PATCH 02/49] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
+Subject: [PATCH 02/50] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
 
 All of these were read off the vendor command stream embedded in .rknn
 model files, across 44 convolution tasks of mobilenet_v1 and 23 of
@@ -479,7 +479,7 @@ index 5a910a97442..04dc7739e83 100644
 From 735e8172e36345e089d5f3655b02c6e4c54dfbb2 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 20:19:36 +0300
-Subject: [PATCH 03/49] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
+Subject: [PATCH 03/50] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
  and DPU_RDMA 0x5024
 
 The vendor command stream extracted from any .rknn shows three things mesa
@@ -587,7 +587,7 @@ index 2a7bc1cd0d5..526531651fc 100644
 From 9fb550c41d594960aff35a8d3c7bc6ae532e3a1b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:06:30 +0300
-Subject: [PATCH 04/49] rocket/rk3568: fix depthwise, pad value and
+Subject: [PATCH 04/50] rocket/rk3568: fix depthwise, pad value and
  KERNEL_GROUP
 
 Three more differences read off the vendor command stream:
@@ -699,7 +699,7 @@ index 04dc7739e83..4f37b0f6458 100644
 From 814f63fba707cccd4bb5625b45be02ae0a74564b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:54:53 +0300
-Subject: [PATCH 05/49] rocket/rk3568: drop the extra weights CBUF bank
+Subject: [PATCH 05/50] rocket/rk3568: drop the extra weights CBUF bank
 
 calc_weights_banks() added one bank on top of its own estimate, with a
 comment saying the calculation might be wrong on this hardware.  On RK3568
@@ -753,7 +753,7 @@ index 4f37b0f6458..34277967c19 100644
 From e57edd58b836f09d0ea0c078848fa450a240c801 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Sat, 22 Aug 2026 00:21:58 +0300
-Subject: [PATCH 06/49] rocket/rk3568: CBUF banks are 64 KiB, and bands must
+Subject: [PATCH 06/50] rocket/rk3568: CBUF banks are 64 KiB, and bands must
  not overshoot
 
 Two sizing errors that made mesa split layers it did not need to split.
@@ -836,7 +836,7 @@ index 34277967c19..c1936c4583c 100644
 From bde5315dbf92c5c14108262f4b50e865f4c031da Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 14:09:32 +0300
-Subject: [PATCH 07/49] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
+Subject: [PATCH 07/50] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
  load-bearing on RK3568
 
 The vendor stream carries 0x00171c07 in every convolution task of
@@ -880,7 +880,7 @@ index 68d95d39878..38e994e3b32 100644
 From 4916f3957a1d165a29a9884ad31e045309aba6f2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 16:47:30 +0300
-Subject: [PATCH 08/49] rocket: RK3568 vendor per-channel requant + atomic
+Subject: [PATCH 08/50] rocket: RK3568 vendor per-channel requant + atomic
  broadcast unit start
 
 The DPU BS stage now takes all three per-channel operands from the BRDMA
@@ -1251,7 +1251,7 @@ index 38e994e3b32..951a05ffbfa 100644
 From 8f1961445571606ab8d59ed8b9be21b31842ba7b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 20:00:27 +0300
-Subject: [PATCH 09/49] rocket: RK3568 native 8-channel feature atomics end to
+Subject: [PATCH 09/50] rocket: RK3568 native 8-channel feature atomics end to
  end
 
 The RK3568 NPU feature format is planar 8-channel surfaces with 8 bytes
@@ -1653,7 +1653,7 @@ index c1936c4583c..36617fe99bb 100644
 From dd57f25faeba395cb27368d58daf6e7ae0563c9b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:05:34 +0300
-Subject: [PATCH 10/49] rocket: RK3568 ARGB first-layer path (Cin=3)
+Subject: [PATCH 10/50] rocket: RK3568 ARGB first-layer path (Cin=3)
 
 Vendor-verified against a live probe-RGB capture and the mobilenet_v1
 task stream:
@@ -1874,7 +1874,7 @@ index 012dfacd74f..4e680e6e328 100644
 From a39559cb1af7f6abe7f9da5ee7be99f1c975a0d7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:52:09 +0300
-Subject: [PATCH 11/49] rocket: RK3568 depthwise 32-channel groups; keep
+Subject: [PATCH 11/50] rocket: RK3568 depthwise 32-channel groups; keep
  oversized FC on CPU
 
 Depthwise convolutions with more than 32 channels run as one task per
@@ -2142,7 +2142,7 @@ index 6697b37ac28..a08742f8064 100644
 From df2636b8fb107bfca4b7d7e76f6a63af15fd9573 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 22:16:52 +0300
-Subject: [PATCH 12/49] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
+Subject: [PATCH 12/50] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
 
 Delegate only a window of the plan nodes -- layer-by-layer bisection
 of chained networks on partially-working NPU drivers.
@@ -2171,7 +2171,7 @@ index 4e680e6e328..fb6354b8112 100644
 From 4d7fe9147daeba35cb8c6b0cfbf5455fb26f6990 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 23:43:26 +0300
-Subject: [PATCH 13/49] rocket: RK3568 FC-shaped convolution path (opt-in via
+Subject: [PATCH 13/50] rocket: RK3568 FC-shaped convolution path (opt-in via
  RKT_BIG_FC)
 
 A 1x1-spatial-input convolution with a large kernel count (the final
@@ -2365,7 +2365,7 @@ index a08742f8064..51c2fe081ab 100644
 From de50351526af5696f5e78dd5fe9405a2d3edea23 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 00:54:24 +0300
-Subject: [PATCH 14/49] rocket: RK3568 PC-chained job submission; FC path on by
+Subject: [PATCH 14/50] rocket: RK3568 PC-chained job submission; FC path on by
  default
 
 Let the PC unit drive a whole multi-task job through the chain tails
@@ -2577,7 +2577,7 @@ index c8ed4f3caae..14690dd5eb7 100644
 From a69bbc8aeaeb9d6d04eacb8275ae91e592a987f5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 14:00:57 +0300
-Subject: [PATCH 15/49] rocket: RK3568 average-pooling delegation;
+Subject: [PATCH 15/50] rocket: RK3568 average-pooling delegation;
  DST_SURF_STRIDE in raw bytes
 
 Average pooling lowers to a depthwise convolution with constant
@@ -2736,7 +2736,7 @@ index 14690dd5eb7..f8cc5225cb2 100644
 From cf4842090d87525f571e812f01c96e480020ccd7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:11 +0300
-Subject: [PATCH 16/49] rocket: RK3568 FEATURE_GRAINS formula for narrow
+Subject: [PATCH 16/50] rocket: RK3568 FEATURE_GRAINS formula for narrow
  outputs; vendor add config
 
 FEATURE_GRAINS: the vendor's 51 mobilenet_v1 tasks match
@@ -3078,7 +3078,7 @@ index f8cc5225cb2..cd7e36f1d9c 100644
 From b4ce40f9250b32c60b6d03a8a72f11075695b72a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 17/49] rocket: RK3568 announced DPU channels align(Cout, 16)
+Subject: [PATCH 17/50] rocket: RK3568 announced DPU channels align(Cout, 16)
  without the 32 floor
 
 With align-to-32 the DPU waited for surfaces that never come on Cout=16
@@ -3125,7 +3125,7 @@ index 51c2fe081ab..34b6e7a7948 100644
 From ad0cf46ee7359190aa98a352d595a1300e07ef02 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 18/49] rocket: RK3568 compact weight tails for partial ic
+Subject: [PATCH 18/50] rocket: RK3568 compact weight tails for partial ic
  slices and oc groups
 
 WPOKE byte mapping on mobilenet_v2 op8 (Cin=144, Cout=24): the tail ic
@@ -3228,7 +3228,7 @@ index 28bc7ae7777..c7d9c2e5b27 100644
 From 8e0483fa9db2fc8b987b6930e9f80960293e93f9 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 19/49] rocket: fused add requants into the ADD output
+Subject: [PATCH 19/50] rocket: fused add requants into the ADD output
  quantization; C%32 gate
 
 The fused conv+add task kept the convolution's output zero point and
@@ -3282,7 +3282,7 @@ index 55eca0e5a2c..33e8de5cb77 100644
 From 3328cf4096546d36bc308c286595f50bea2ee154 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:29:34 +0300
-Subject: [PATCH 20/49] rocket: pad fused-add kernels to align(C, 32); gate
+Subject: [PATCH 20/50] rocket: pad fused-add kernels to align(C, 32); gate
  banded fused adds
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3590,7 +3590,7 @@ index fb6354b8112..357ec8127c5 100644
 From eb1ae174c9b582b1db916b490d5082caf7611964 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:33:52 +0300
-Subject: [PATCH 21/49] rocket: 8-byte weight kernel rows are ARGB-only;
+Subject: [PATCH 21/50] rocket: 8-byte weight kernel rows are ARGB-only;
  Cin=4..8 uses 16
 
 The 8-byte kernel row in the weight layout belongs to the packed-RGB
@@ -3628,7 +3628,7 @@ index 5e89dd33a3f..dc59436adb6 100644
 From a2e32845fb3bcb092e8e0e98613e312d1b2f9a74 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 19:10:55 +0300
-Subject: [PATCH 22/49] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
+Subject: [PATCH 22/50] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
 
 The second EW input keeps full-height surfaces, so on a row-band task
 the EW RDMA has to skip the part of each surface that lies outside the
@@ -3766,7 +3766,7 @@ index 357ec8127c5..fb6354b8112 100644
 From 0a91d2180afdcec06dfb3878b3aa69f69d7f17c6 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:36 +0300
-Subject: [PATCH 23/49] rocket: ic slices sit above the taps in the dense
+Subject: [PATCH 23/50] rocket: ic slices sit above the taps in the dense
  weight layout
 
 The order inside a 16-kernel group is [ic-slice][tap][oc%16][ic%32],
@@ -3820,7 +3820,7 @@ index dc59436adb6..0e415e0e80a 100644
 From 180ba4010b592b4f6422420c123414e82dbe1ad1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:37 +0300
-Subject: [PATCH 24/49] rocket: fuse residual adds into the later producer;
+Subject: [PATCH 24/50] rocket: fuse residual adds into the later producer;
  wire fused RELU
 
 The EW stream of a fused conv+add task reads the other input's tensor
@@ -3984,7 +3984,7 @@ index 2c8e85a8b03..46f84035c89 100644
 From 61b74ab6080f7ffd6c7c7fb7b82d43d91f6b3a7e Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:52:39 +0300
-Subject: [PATCH 25/49] rocket: align feature surfaces to 4 pixels; real fused
+Subject: [PATCH 25/50] rocket: align feature surfaces to 4 pixels; real fused
  relu; dedup job BOs
 
 Three independent fixes from the resnet18 bring-up:
@@ -4262,7 +4262,7 @@ index e031193b3be..ef4b994befd 100644
 From 99248a6a562deb722ae74047b026e01b1e83328c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 22:31:07 +0300
-Subject: [PATCH 26/49] rocket: chain the whole graph into one PC task chain
+Subject: [PATCH 26/50] rocket: chain the whole graph into one PC task chain
  per submit
 
 Link every operation's last regcmd stream to the next operation's first
@@ -4452,7 +4452,7 @@ index 83c05434f66..95cba34361d 100644
 From 0c0cd848559db01bc188480fc39a69c55468dfbb Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 23:54:48 +0300
-Subject: [PATCH 27/49] rocket: vendor single-interrupt scheme; PPU max pooling
+Subject: [PATCH 27/50] rocket: vendor single-interrupt scheme; PPU max pooling
 
 Completion now follows the vendor driver (rknpu_job_subcore_commit_pc):
 only the LAST task's interrupt is unmasked, so a whole chained graph
@@ -5001,7 +5001,7 @@ index ee755e78a97..777ee263762 100644
 From d506ff6a1c30d53abb429d5c142c05b669a157d8 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 12:56:12 +0300
-Subject: [PATCH 28/49] rocket: average pooling on the PPU
+Subject: [PATCH 28/50] rocket: average pooling on the PPU
 
 Average pooling prefers the PPU chunk too: OPERATION_MODE method bits 0
 and RECIP_KERNEL_WIDTH/HEIGHT = 65536/kernel (vendor probe-AP encoding:
@@ -5125,7 +5125,7 @@ index 3ced8c88154..25f69712b11 100644
 From 442b73c90fee297dde24f70791f98ea8ff044da4 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 13:40:16 +0300
-Subject: [PATCH 29/49] rocket: support FULLY_CONNECTED as a 1x1 convolution
+Subject: [PATCH 29/50] rocket: support FULLY_CONNECTED as a 1x1 convolution
 
 A fully-connected layer over a single spatial pixel is exactly a 1x1
 convolution: the TFLite [out, in] weight matrix is bytewise identical
@@ -5266,7 +5266,7 @@ index fb6354b8112..c1275ab0ae7 100644
 From 08ef3da4b21ea476684395ada2f603d26c5fd3fa Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:02:58 +0300
-Subject: [PATCH 30/49] rocket: channel concatenation as addressing
+Subject: [PATCH 30/50] rocket: channel concatenation as addressing
 
 In the planar 8-channel surface layout a channel-wise concatenation is
 pure addressing: each input occupies its own run of surfaces in the
@@ -5643,7 +5643,7 @@ index 25f69712b11..9b8dbd965d4 100644
 From 3dde38866d6582b5a1e854343f1dc534cfbb5146 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 31/49] rocket: size CBUF banks for the declared input channels
+Subject: [PATCH 31/50] rocket: size CBUF banks for the declared input channels
 
 The band splitter counted CBUF entries from the real channel count
 while DATA_SIZE1 declares align(max(C, 16), 16) channels -- and the
@@ -5704,7 +5704,7 @@ index ef4b994befd..584301bdf78 100644
 From 0eb7a1ce93ec1f9e7d64d9aa3130dd8995bfcd6c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 32/49] rocket: clip the PPU input cube to the consumed rows
+Subject: [PATCH 32/50] rocket: clip the PPU input cube to the consumed rows
  and columns
 
 The PPU derives its window count from the input cube, rounding up: fed
@@ -5779,7 +5779,7 @@ index 9b8dbd965d4..d8ba5309b15 100644
 From db7ec18b86685adce11466ebcf3a70753fbf0c68 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:47:48 +0300
-Subject: [PATCH 33/49] rocket: fix depthwise convolutions with fewer than 32
+Subject: [PATCH 33/50] rocket: fix depthwise convolutions with fewer than 32
  channels
 
 Two mismatches against the vendor stream, found with offline-decoded
@@ -5866,7 +5866,7 @@ index 584301bdf78..5bc892b9cce 100644
 From d2c731a0b017172e427d5669e0e9ec8c78de3d04 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 16:22:54 +0300
-Subject: [PATCH 34/49] rocket: fix the axis convention -- width is the
+Subject: [PATCH 34/50] rocket: fix the axis convention -- width is the
  contiguous memory row
 
 The driver read dims[1] as width and dims[2] as height, but the input
@@ -6064,7 +6064,7 @@ index ca237abdbda..083fbae91cf 100644
 From c53a1ee10c4a37559d1f2a155cd90cce5dbeda5a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:17:04 +0300
-Subject: [PATCH 35/49] rocket: lower the concat identity copy as depthwise
+Subject: [PATCH 35/50] rocket: lower the concat identity copy as depthwise
  when channels allow
 
 The identity copy into a concat output slice was a pointwise
@@ -6160,7 +6160,7 @@ index 083fbae91cf..ca0ec8cd832 100644
 From b79f837a1626443990401ec9ff4cc4640655d3d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:23:59 +0300
-Subject: [PATCH 36/49] rocket: host a leading max pool's PPU chunk in an
+Subject: [PATCH 36/50] rocket: host a leading max pool's PPU chunk in an
  identity-copy carrier
 
 A PPU pool chunk compiles into the regcmd BO of the operation right
@@ -6256,7 +6256,7 @@ index ca0ec8cd832..aa2aef54da4 100644
 From b53692820eed3378ae5c372034d808308d8f378b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 20:38:15 +0300
-Subject: [PATCH 37/49] rocket/teflon: support INT8 tensors and per-channel
+Subject: [PATCH 37/50] rocket/teflon: support INT8 tensors and per-channel
  weight quantization
 
 INT8 is folded into the driver's uint8 domain at the edges: teflon
@@ -6615,7 +6615,7 @@ index c1275ab0ae7..bf3ad0c1f4c 100644
 From ef7af777701a697dd0ce4889b1cc563dc6151b40 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 21:29:40 +0300
-Subject: [PATCH 38/49] rocket: survive an ADD whose inputs both come from
+Subject: [PATCH 38/50] rocket: survive an ADD whose inputs both come from
  outside the partition
 
 A yolo-style partition can OPEN with an ADD: both inputs then have no
@@ -6830,7 +6830,7 @@ index 4afc2b63ef0..afa33b1ef14 100644
 From 4c05b9fbe5b10196fcc45585776fb545d41ae72b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 22:10:09 +0300
-Subject: [PATCH 39/49] rocket: fix the two defects behind the standalone-ADD
+Subject: [PATCH 39/50] rocket: fix the two defects behind the standalone-ADD
  mismatch
 
 1. A depthwise host for a fused addition reads the EW operand with the
@@ -7071,7 +7071,7 @@ index afa33b1ef14..f18133a1f16 100644
 From 8fb3fa0020096ad83fd3215c0302355f9fbf46d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 14:49:12 +0300
-Subject: [PATCH 40/49] rocket: drop the dead RE probes, keep the documented
+Subject: [PATCH 40/50] rocket: drop the dead RE probes, keep the documented
  debug knobs
 
 Remove the environment probes whose answers are already baked into the
@@ -7596,7 +7596,7 @@ index 5bc892b9cce..be449b9882c 100644
 From 74c04966edcc08f611684cc0c3d8ad0428c7b5c5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 14:51:46 +0300
-Subject: [PATCH 41/49] rocket: add README-rk3568.md, a map of the RK3568 path
+Subject: [PATCH 41/50] rocket: add README-rk3568.md, a map of the RK3568 path
  for the next reader
 
 Data flow through the delegate, the memory conventions (axes, 8-channel
@@ -7782,7 +7782,7 @@ index 00000000000..49ca261ff0d
 From 7c409cf6a6db218c69854b82eb02813df57e67c2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 15:16:32 +0300
-Subject: [PATCH 42/49] rocket: README-rk3568.md: point at the published lab
+Subject: [PATCH 42/50] rocket: README-rk3568.md: point at the published lab
  log
 
 ---
@@ -7813,7 +7813,7 @@ index 49ca261ff0d..a2fe289b620 100644
 From 5fd254e29ca323711a40bc4f29616e09185172dc Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 16:36:50 +0300
-Subject: [PATCH 43/49] rocket/teflon: fuse x * sigmoid(x) (SiLU) into the
+Subject: [PATCH 43/50] rocket/teflon: fuse x * sigmoid(x) (SiLU) into the
  convolution via the DPU LUT
 
 TFLite lowers SiLU to CONV -> LOGISTIC -> MUL(conv_out, logistic_out).
@@ -8440,7 +8440,7 @@ index cbce129eea2..e85fc4c79d5 100644
 From 5996173fbd72e58ac6b1bfa9ab372ab83acd69bc Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 17:52:20 +0300
-Subject: [PATCH 44/49] rocket/teflon: yolo's C2f plumbing -- SLICE, QUANTIZE
+Subject: [PATCH 44/50] rocket/teflon: yolo's C2f plumbing -- SLICE, QUANTIZE
  and PAD without copies
 
 yolov8n's graph broke into dozens of partitions on three operations
@@ -9156,7 +9156,7 @@ index e85fc4c79d5..030865572f0 100644
 From 5969b995995dc04e20cfd06ad256837551ad5a4f Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 18:29:55 +0300
-Subject: [PATCH 45/49] rocket: nearest-neighbour 2x upsample on the DPU
+Subject: [PATCH 45/50] rocket: nearest-neighbour 2x upsample on the DPU
  (yolo's neck RESIZE)
 
 The vendor's Resize is a DPU-only task per 8-channel surface: the DPU
@@ -9463,7 +9463,7 @@ index cdb77387afa..0c8cc4c74f1 100644
 From af2d89417b1ba9c47bc82bbbd00f3aa0768b71e4 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 18:46:15 +0300
-Subject: [PATCH 46/49] rocket/teflon: cut the CPU side of an invoke -- one
+Subject: [PATCH 46/50] rocket/teflon: cut the CPU side of an invoke -- one
  context, 8-byte packing
 
 - teflon: one pipe_context per partition instead of one per invoke
@@ -9760,7 +9760,7 @@ index 8fb8619e8c6..27b8e71e83f 100644
 From 4fdbdba48f03ace9cd88fda980a1fd69a46cb9aa Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 19:04:17 +0300
-Subject: [PATCH 47/49] rocket: one LUT domain per job, sized from the SiLU
+Subject: [PATCH 47/50] rocket: one LUT domain per job, sized from the SiLU
  layers it serves
 
 The lookup-table output is 16 bits holding 2 * silu(x) in LUT units,
@@ -9930,7 +9930,7 @@ index ecb055fa144..6522e009b01 100644
 From 5f59f4f067a8d84a1482ddc08054c87556bf6979 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 19:07:03 +0300
-Subject: [PATCH 48/49] rocket: keep the CPU mapping of a BO for its lifetime
+Subject: [PATCH 48/50] rocket: keep the CPU mapping of a BO for its lifetime
 
 A transfer_map did a fresh mmap every time (and never unmapped it):
 a page-fault sweep per invoke, ~0.3 ms on the 320x320x3 yolo input and
@@ -10006,7 +10006,7 @@ index 428750e9da7..056e6768b77 100644
 From 7b1bb194076cb611e3eb2441a2e6d876974eeabf Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Tue, 25 Aug 2026 19:26:14 +0300
-Subject: [PATCH 49/49] rocket/teflon: fold the graph-input and graph-output
+Subject: [PATCH 49/50] rocket/teflon: fold the graph-input and graph-output
  layout ops into packing
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -10480,6 +10480,132 @@ index 030865572f0..ff4d0436f53 100644
     /**
      * Tensor used as input.
      */
+-- 
+2.53.0
+
+
+From de17c09f4b1dd412e506885b9b81975f93f229c2 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 20:30:02 +0300
+Subject: [PATCH 50/50] rocket: the vendor's DPU-only concat-leg copy, behind
+ RKT_DPU_COPY
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The vendor copies concat legs with a DPU-only task per surface (RDMA in,
+WDMA out, no MAC — probe-C2F.rknn tasks 1/2/4/5/6): the upsample task
+skeleton without the unpooling, plus DATA_FORMAT 0, a surface DST stride,
+BS_OW_CFG 2, RDMA channel count and RDMA_FEATURE_MODE_CFG 0x4001.
+
+It does not help: the intra-chain race on tiny graphs is the same with
+it (4/40 vs 1/40 fresh processes on layer-c2f-add-out), and yolov8n has
+only three same-quantization legs left (15.8 vs 15.3 ms, more tasks).
+Kept as an experiment knob, off by default (RE-LOG Test 79).
+---
+ src/gallium/drivers/rocket/rkt_ml.c     | 42 +++++++++++++++++++++++--
+ src/gallium/drivers/rocket/rkt_ml.h     |  3 ++
+ src/gallium/drivers/rocket/rkt_regcmd.c | 11 +++++--
+ 3 files changed, 52 insertions(+), 4 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index eb2840ce61a..fcab32200eb 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -536,6 +536,41 @@ lower_identity_copy(struct rkt_ml_subgraph *subgraph,
+    free(bdata);
+ }
+ 
++/* The vendor's concat-leg copy: a DPU-only task per 8-channel surface,
++ * RDMA in, WDMA out, no MAC (probe-C2F.rknn tasks 1/2/4/5/6).  Same
++ * quantization only for now. */
++static void
++lower_dpu_copy(struct rkt_ml_subgraph *subgraph, const struct pipe_tensor *in,
++               const struct pipe_tensor *out, unsigned dst_offset,
++               struct rkt_operation *op)
++{
++   op->is_upsample = true;
++   op->is_dpu_copy = true;
++   op->add_tensor = -1;
++   op->tasks = UTIL_DYNARRAY_INIT;
++   op->input_index = in->index;
++   op->input_width = in->dims[2];
++   op->input_height = in->dims[1];
++   op->input_channels = in->dims[3];
++   op->input_zero_point = in->zero_point;
++   op->input_scale = in->scale;
++   op->src_channels = op->input_channels;
++   op->output_index = out->index;
++   op->output_width = in->dims[2];
++   op->output_height = in->dims[1];
++   op->output_channels = in->dims[3];
++   op->output_zero_point = out->zero_point;
++   op->output_scale = out->scale;
++   op->dst_offset = dst_offset;
++   resolve_views(subgraph, op);
++   for (unsigned s = 0; s < DIV_ROUND_UP(op->input_channels, 8); s++) {
++      struct split_task task = {0};
++      task.num = s;
++      task.channel_group = s;
++      util_dynarray_append(&op->tasks, task);
++   }
++}
++
+ /* Whether the concatenation at poperations[conc_idx] is the only reader
+  * of the tensor: only then may its producer be retargeted to write the
+  * concat output slice directly (the tensor itself then never
+@@ -1157,8 +1192,11 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
+             } else {
+                struct rkt_operation copy = {0};
+                copy.add_tensor = -1;
+-               lower_identity_copy(subgraph, in, out, dst_offset, false,
+-                                   &copy);
++               if (!requant && getenv("RKT_DPU_COPY"))
++                  lower_dpu_copy(subgraph, in, out, dst_offset, &copy);
++               else
++                  lower_identity_copy(subgraph, in, out, dst_offset, false,
++                                      &copy);
+                util_dynarray_append(&subgraph->operations, copy);
+             }
+             ch_off += in->dims[3];
+diff --git a/src/gallium/drivers/rocket/rkt_ml.h b/src/gallium/drivers/rocket/rkt_ml.h
+index be496a3c29c..dd154e83bcb 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.h
++++ b/src/gallium/drivers/rocket/rkt_ml.h
+@@ -127,6 +127,9 @@ struct rkt_operation {
+    /* Nearest-neighbour 2x upsample: one DPU-only task per 8-channel
+     * surface, DPU_RDMA "unpooling" mode (vendor Resize, RE-LOG Test 77). */
+    bool is_upsample;
++   /* A DPU-only RDMA->WDMA copy (the vendor's concat-leg copy): the
++    * upsample task skeleton without the unpooling. */
++   bool is_dpu_copy;
+    /* Average pooling instead of max: OPERATION_MODE method bits 0 and the
+     * RECIP_KERNEL registers = 65536/kernel (vendor probe-AP: 7 -> 9362). */
+    bool pool_avg;
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index 0c8cc4c74f1..8b1f098b4fb 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -829,10 +829,17 @@ fill_upsample_regcmd(struct rkt_ml_subgraph *subgraph,
+       uint32_t val = upsample_skeleton[i].val;
+       switch (upsample_skeleton[i].reg) {
+       case 0x4020: val = dst; break;                         /* DST_BASE_ADDR */
+-      case 0x4024: val = wout * 8; break;                    /* DST_SURF_STRIDE */
++      case 0x4024: val = operation->is_dpu_copy ? out_surf : wout * 8; break; /* DST_SURF_STRIDE */
+       case 0x4030: val = wout - 1; break;                    /* DATA_CUBE_WIDTH */
+       case 0x4034: val = hin - 1; break;                     /* DATA_CUBE_HEIGHT: input rows, the unpooling doubles them */
+-      case 0x4038: val = wout | (wout << 16); break;         /* NOTCH_ADDR */
++      case 0x4038: val = operation->is_dpu_copy ? 0 : wout | (wout << 16); break; /* NOTCH_ADDR */
++      case 0x5048: val = operation->is_dpu_copy ? 0 : val; break; /* RDMA_SRC_DMA_CFG: no unpooling for a copy */
++      /* The plain copy follows the vendor's concat-leg task (probe-C2F
++       * task 1) where it differs from the upsample probe. */
++      case 0x4010: val = operation->is_dpu_copy ? 0 : val; break;          /* DATA_FORMAT */
++      case 0x4050: val = operation->is_dpu_copy ? 2 : val; break;          /* BS_OW_CFG */
++      case 0x5014: val = operation->is_dpu_copy ? 7 : val; break;          /* RDMA cube channels - 1 */
++      case 0x5044: val = operation->is_dpu_copy ? 0x4001 : val; break;     /* RDMA_FEATURE_MODE_CFG */
+       case 0x40c0: val = wout * hout * 8; break;             /* SURFACE_ADD */
+       case 0x500c: val = win - 1; break;                     /* RDMA cube W */
+       case 0x5010: val = hin - 1; break;                     /* RDMA cube H */
 -- 
 2.53.0
 

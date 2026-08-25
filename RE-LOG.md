@@ -2234,3 +2234,21 @@ ms is the 3D DFL tail on the CPU, not low-hanging); v1 5.4, v2 6.3, r18
 11.2 ms; detections = CPU; regression at the baseline.  Not taken: C2f
 without copies (retargeting cv1 into the concat BO broke yolo, gain ~0.2
 ms), the chain race (2% on tiny graphs, yolo 20/20 identical).
+
+## Test 79 (2026-08-25): the vendor's DPU concat-leg copy — does not cure the chain race
+
+Vendor C2f (tfwork/gen_c2f_rknn.py → probe-C2F.rknn, 12 tasks): the concat
+legs are copied by DPU-only tasks with an RDMA input (73 words:
+FEATURE_MODE 0x109, RDMA_FEATURE_MODE 0x4001, SRC_DMA_CFG 0, 16 channels
+per task, requant through BS_ALU(+zp) + OUT_CVT), with NO barriers — the
+consumer cv2 follows the last copy directly; after cv2 two tiny 8px×4ch
+TP_EN=1 tasks (the fp16 output tail, not a barrier).  Implemented here
+(`is_dpu_copy`, the upsample skeleton without the unpooling; deltas from
+the skeleton: DATA_FORMAT 0, DST_SURF_STRIDE = surface, BS_OW_CFG 2, RDMA
+channel 7, RDMA_FEATURE_MODE 0x4001) — concat-copy exact 0, c2f ≤4 LSB.
+c2f-add-out flakes over 40 fresh processes: DPU copy 4/40, conv copy 1/40
+— the race is not in the MAC copy but in the consumer starting relative
+to the previous task's WDMA.  yolo: 3 legs without requant → 15.8 vs 15.3
+ms (more tasks: 8 channels each).  Kept under RKT_DPU_COPY=1 (off).  The
+race stays parked; next candidate — a WDMA-wait register at the CNA/PC
+(not found).
