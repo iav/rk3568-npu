@@ -85,10 +85,10 @@ maps and corrupted every non-square one.
 | `module/` | out-of-tree build of the `rocket` kernel driver with RK3568 fixes (fork of the in-tree driver from 7.2-rc7) |
 | `overlay/` | device-tree overlay enabling the NPU on ODROID-M1 |
 | `mesa-patches/` | the Mesa branch as a patch series (also pushed as a branch, see below) |
-| `tests/` | probe-layer test harness (`suite.py`, `suite_i8.py` for int8 probes), mobilenet comparison (`mob.py`), single-layer oracle (`run7.py`), vendor-capture replay tool (`replay.c`) |
+| `tests/` | probe-layer test harness (`suite.py`, uint8 and int8 by the model's input dtype), whole-network comparison (`mob.py`, one line per run), float-input smoke test (`yolo_probe.py`), single-layer oracle (`run7.py`), vendor-capture replay tool (`replay.c`) |
 | `models/` | pre-generated quantized single-layer .tflite probes |
 | `capture/` | LD_PRELOAD shim used to capture vendor command streams for comparison (needs the vendor stack, only for further RE work) |
-| `tools/` | `rknn_regcmd.py` (extract + decode the vendor command stream from a .rknn), `rknn_diff.py` (diff an `RKT_DUMP` stream against it) |
+| `tools/` | `rknn_regcmd.py` (extract + decode the vendor command stream from a .rknn — tasks cut at the PC tail, so LUT loaders and DPU-only copies are seen; `--table` for the geometry summary), `rknn_diff.py` (diff an `RKT_DUMP` stream against it) |
 | `README-rk3568.md` | map of the driver for the next reader: data flow, memory conventions, BS-stream requantization, the load-bearing settings with their lab-log test numbers, debug knobs (copy of the file in the Mesa branch) |
 
 Mesa branch: https://github.com/iav/mesa tree `rk3568-test-session-20260820`
@@ -168,8 +168,8 @@ Python venv with `tflite-runtime` (or `ai-edge-litert` on newer python) and
 numpy. Then:
 
 ```
-python tests/suite.py models/layer-c28.tflite      # per-layer probes vs CPU
-python tests/mob.py                                 # mobilenet_v1 CPU vs NPU
+python tests/suite.py models/layer-c28.tflite      # per-layer probes vs CPU (uint8 or int8)
+python tests/mob.py                                 # mobilenet_v1 CPU vs NPU, one line
 ```
 
 `suite.py` prints `max/mean` absolute difference against the CPU

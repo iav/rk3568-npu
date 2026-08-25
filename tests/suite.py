@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# Probe-layer harness: CPU vs NPU on seven input patterns, uint8 or int8
+# (dtype and shape from the model's input tensor).  Prints max/mean abs diff.
 import os
 import numpy as np, sys
 try:
@@ -12,16 +15,18 @@ def mk(mode):
 cpu=mk("cpu"); npu=mk("npu")
 i0=cpu.get_input_details()[0]
 H,W,C=i0["shape"][1],i0["shape"][2],i0["shape"][3]
-ones=np.ones((1,H,W,C),np.uint8)
+dt=i0["dtype"]
+off = -128 if dt==np.int8 else 0
+ones=np.ones((1,H,W,C),np.int32)
 tests={}
-for f in [0,128,255]: tests[f"f{f}"]=ones*np.uint8(f)
-tests["colgrad"]=ones*((np.arange(W)*2+60)%256).astype(np.uint8)[None,None,:,None]
-tests["rowgrad"]=ones*((np.arange(H)*2+60)%256).astype(np.uint8)[None,:,None,None]
-tests["chan"]=ones*((np.arange(C)*8)%256).astype(np.uint8)[None,None,None,:]
-tests["mix"]=((np.arange(H)[:,None,None]*3+np.arange(W)[None,:,None]*5+np.arange(C)[None,None,:]*17)%256).astype(np.uint8)[None]
+for f in [0,128,255]: tests[f"f{f}"]=ones*(f+off)
+tests["colgrad"]=ones*(((np.arange(W)*2+60)%256)+off)[None,None,:,None]
+tests["rowgrad"]=ones*(((np.arange(H)*2+60)%256)+off)[None,:,None,None]
+tests["chan"]=ones*(((np.arange(C)*8)%256)+off)[None,None,None,:]
+tests["mix"]=(((np.arange(H)[:,None,None]*3+np.arange(W)[None,:,None]*5+np.arange(C)[None,None,:]*17)%256)+off)[None]
 out=[]
 for name,x in tests.items():
-    x=x.astype(np.uint8)
+    x=x.astype(dt)
     r={}
     for ip,tag in [(cpu,"cpu"),(npu,"npu")]:
         j=ip.get_input_details()[0]; o=ip.get_output_details()[0]

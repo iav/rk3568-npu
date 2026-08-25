@@ -92,6 +92,7 @@ def main():
     regnames = json.load(open(args.regnames))
     data = open(args.rknn, "rb").read()
     vend, _ = rr.split_tasks(rr.words_from(data, rr.find_regcmd(data)))
+    vend = [t for t in vend if rr.task_kind(t) != "reloc"]
     mesa, _ = rr.split_tasks(load_mesa(args.mesa_dump))
 
     vgroups, mgroups = defaultdict(list), defaultdict(list)
