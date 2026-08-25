@@ -43,12 +43,13 @@ Status (2026-08-25, night):
   travel with the job (uapi `lut_data`, see below) and the kernel writes
   them through MMIO -- loading them from the command stream lands only
   the first table (RE-LOG Test 75);
-- **yolov8n_int8 (320x320) runs end to end**: the backbone, neck and the
-  three detection heads on the NPU, only the input quantize/transpose,
-  the two nearest-neighbour upsamples and the [1, 84, 2100] DFL tail on
-  the CPU.  On bus.jpg the NPU produces the same five detections as the
-  CPU (boxes, classes, scores; raw output mean diff 3e-4): **27 ms vs
-  69 ms** CPU-only (XNNPACK, four A55).  C2f's channel SLICE, the
+- **yolov8n_int8 (320x320) runs end to end**: the backbone, neck (the
+  nearest-neighbour upsamples run on the DPU in its unpooling mode) and
+  the three detection heads on the NPU in two partitions; only the input
+  quantize/transpose and the [1, 84, 2100] DFL tail stay on the CPU.  On
+  bus.jpg the NPU produces the same five detections as the CPU (boxes,
+  classes, scores; raw output mean diff 3e-4): **18 ms vs 70 ms**
+  CPU-only (XNNPACK, four A55).  C2f's channel SLICE, the
   int8->int8 QUANTIZE on concat legs and the explicit PAD before
   stride-2 convolutions are handled as addressing / producer
   retargeting, with no copies (`tests/yolo_cmp.py`, RE-LOG Test 76); a depthwise host reads the second

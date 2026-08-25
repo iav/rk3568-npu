@@ -25,6 +25,8 @@ teflon (TFLite delegate)
        │                           add hosts, pool-first carriers)
        │    lower_silu             LOGISTIC+MUL folded into the producer conv
        │                           (DPU LUT path; tables go with the job)
+       │    RESIZE (nearest 2x)    one DPU-only task per 8-channel surface,
+       │                           DPU_RDMA unpooling mode
        ├─ rkt_split_tasks()                 rkt_task.c   bands x channel groups
        ├─ rkt_fill_weights / rkt_fill_biases rkt_coefs.c  packed weights, BS stream
        ├─ compile_operation()               rkt_ml.c     one regcmd BO per op
@@ -117,6 +119,8 @@ only with a vendor capture to compare against.
 | a SiLU convolution never hosts a fused add | its EW stage is the lookup table; a pointwise identity copy hosts the add instead | 76 |
 | maps wider/taller than 2047 stay on the CPU | 11-bit CNA/CORE size fields (yolo's 4x2100 DFL convolution) | 76 |
 | the kernel loads the LUT right before the chain starts, +50 us, and skips identical tables | a chain started behind the load read a half-written table; the SRAM is lost across runtime suspend and reset (cache invalidated there) | 76 |
+| upsample task: DPU cube height = INPUT rows, RDMA_SRC_DMA_CFG 0x1249 | with the output row count the DPU waits for rows that never come and the job times out | 77 |
+| DPU-only tasks need a real RDMA source (FLYING_MODE=1 = input from RDMA) | a DPU-only task with no input never completes and eats the next task's first pixels | 76/77 |
 
 ## 5. How to debug
 
