@@ -1,7 +1,7 @@
 From b79779acc5f2640ff3bb2b395df03eb2657dd2a3 Mon Sep 17 00:00:00 2001
 From: Midgy BALON <midgy971@gmail.com>
 Date: Tue, 9 Jun 2026 16:27:53 +0200
-Subject: [PATCH 01/39] rocket/teflon: add RK3568 NPU conv config support
+Subject: [PATCH 01/41] rocket/teflon: add RK3568 NPU conv config support
  (Draft)
 
 The Rocket Gallium driver / Teflon delegate currently targets the RK3588 NPU.
@@ -292,7 +292,7 @@ index eee2fe174fa..3c8f1a96bb5 100644
 From 35561c80d7bfdc22224aa8dd0a4be57fd65fd5dd Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 21:21:08 +0300
-Subject: [PATCH 02/39] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
+Subject: [PATCH 02/41] rocket/rk3568: vendor-exact register formulas (CNA/DPU)
 
 All of these were read off the vendor command stream embedded in .rknn
 model files, across 44 convolution tasks of mobilenet_v1 and 23 of
@@ -479,7 +479,7 @@ index 5a910a97442..04dc7739e83 100644
 From 735e8172e36345e089d5f3655b02c6e4c54dfbb2 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 20:19:36 +0300
-Subject: [PATCH 03/39] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
+Subject: [PATCH 03/41] rocket/rk3568: fix CORE register map, add CMAC MISC_CFG
  and DPU_RDMA 0x5024
 
 The vendor command stream extracted from any .rknn shows three things mesa
@@ -587,7 +587,7 @@ index 2a7bc1cd0d5..526531651fc 100644
 From 9fb550c41d594960aff35a8d3c7bc6ae532e3a1b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:06:30 +0300
-Subject: [PATCH 04/39] rocket/rk3568: fix depthwise, pad value and
+Subject: [PATCH 04/41] rocket/rk3568: fix depthwise, pad value and
  KERNEL_GROUP
 
 Three more differences read off the vendor command stream:
@@ -699,7 +699,7 @@ index 04dc7739e83..4f37b0f6458 100644
 From 814f63fba707cccd4bb5625b45be02ae0a74564b Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Fri, 21 Aug 2026 23:54:53 +0300
-Subject: [PATCH 05/39] rocket/rk3568: drop the extra weights CBUF bank
+Subject: [PATCH 05/41] rocket/rk3568: drop the extra weights CBUF bank
 
 calc_weights_banks() added one bank on top of its own estimate, with a
 comment saying the calculation might be wrong on this hardware.  On RK3568
@@ -753,7 +753,7 @@ index 4f37b0f6458..34277967c19 100644
 From e57edd58b836f09d0ea0c078848fa450a240c801 Mon Sep 17 00:00:00 2001
 From: iav <iav@iav.lv>
 Date: Sat, 22 Aug 2026 00:21:58 +0300
-Subject: [PATCH 06/39] rocket/rk3568: CBUF banks are 64 KiB, and bands must
+Subject: [PATCH 06/41] rocket/rk3568: CBUF banks are 64 KiB, and bands must
  not overshoot
 
 Two sizing errors that made mesa split layers it did not need to split.
@@ -836,7 +836,7 @@ index 34277967c19..c1936c4583c 100644
 From bde5315dbf92c5c14108262f4b50e865f4c031da Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 14:09:32 +0300
-Subject: [PATCH 07/39] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
+Subject: [PATCH 07/41] rocket: write CNA_DMA_CON0 verbatim, bit 20 is
  load-bearing on RK3568
 
 The vendor stream carries 0x00171c07 in every convolution task of
@@ -880,7 +880,7 @@ index 68d95d39878..38e994e3b32 100644
 From 4916f3957a1d165a29a9884ad31e045309aba6f2 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 16:47:30 +0300
-Subject: [PATCH 08/39] rocket: RK3568 vendor per-channel requant + atomic
+Subject: [PATCH 08/41] rocket: RK3568 vendor per-channel requant + atomic
  broadcast unit start
 
 The DPU BS stage now takes all three per-channel operands from the BRDMA
@@ -1251,7 +1251,7 @@ index 38e994e3b32..951a05ffbfa 100644
 From 8f1961445571606ab8d59ed8b9be21b31842ba7b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 20:00:27 +0300
-Subject: [PATCH 09/39] rocket: RK3568 native 8-channel feature atomics end to
+Subject: [PATCH 09/41] rocket: RK3568 native 8-channel feature atomics end to
  end
 
 The RK3568 NPU feature format is planar 8-channel surfaces with 8 bytes
@@ -1653,7 +1653,7 @@ index c1936c4583c..36617fe99bb 100644
 From dd57f25faeba395cb27368d58daf6e7ae0563c9b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:05:34 +0300
-Subject: [PATCH 10/39] rocket: RK3568 ARGB first-layer path (Cin=3)
+Subject: [PATCH 10/41] rocket: RK3568 ARGB first-layer path (Cin=3)
 
 Vendor-verified against a live probe-RGB capture and the mobilenet_v1
 task stream:
@@ -1874,7 +1874,7 @@ index 012dfacd74f..4e680e6e328 100644
 From a39559cb1af7f6abe7f9da5ee7be99f1c975a0d7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 21:52:09 +0300
-Subject: [PATCH 11/39] rocket: RK3568 depthwise 32-channel groups; keep
+Subject: [PATCH 11/41] rocket: RK3568 depthwise 32-channel groups; keep
  oversized FC on CPU
 
 Depthwise convolutions with more than 32 channels run as one task per
@@ -2142,7 +2142,7 @@ index 6697b37ac28..a08742f8064 100644
 From df2636b8fb107bfca4b7d7e76f6a63af15fd9573 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 22:16:52 +0300
-Subject: [PATCH 12/39] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
+Subject: [PATCH 12/41] teflon: TEFLON_MIN_OPS/TEFLON_MAX_OPS debug knobs
 
 Delegate only a window of the plan nodes -- layer-by-layer bisection
 of chained networks on partially-working NPU drivers.
@@ -2171,7 +2171,7 @@ index 4e680e6e328..fb6354b8112 100644
 From 4d7fe9147daeba35cb8c6b0cfbf5455fb26f6990 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 23:43:26 +0300
-Subject: [PATCH 13/39] rocket: RK3568 FC-shaped convolution path (opt-in via
+Subject: [PATCH 13/41] rocket: RK3568 FC-shaped convolution path (opt-in via
  RKT_BIG_FC)
 
 A 1x1-spatial-input convolution with a large kernel count (the final
@@ -2365,7 +2365,7 @@ index a08742f8064..51c2fe081ab 100644
 From de50351526af5696f5e78dd5fe9405a2d3edea23 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 00:54:24 +0300
-Subject: [PATCH 14/39] rocket: RK3568 PC-chained job submission; FC path on by
+Subject: [PATCH 14/41] rocket: RK3568 PC-chained job submission; FC path on by
  default
 
 Let the PC unit drive a whole multi-task job through the chain tails
@@ -2577,7 +2577,7 @@ index c8ed4f3caae..14690dd5eb7 100644
 From a69bbc8aeaeb9d6d04eacb8275ae91e592a987f5 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 14:00:57 +0300
-Subject: [PATCH 15/39] rocket: RK3568 average-pooling delegation;
+Subject: [PATCH 15/41] rocket: RK3568 average-pooling delegation;
  DST_SURF_STRIDE in raw bytes
 
 Average pooling lowers to a depthwise convolution with constant
@@ -2736,7 +2736,7 @@ index 14690dd5eb7..f8cc5225cb2 100644
 From cf4842090d87525f571e812f01c96e480020ccd7 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:11 +0300
-Subject: [PATCH 16/39] rocket: RK3568 FEATURE_GRAINS formula for narrow
+Subject: [PATCH 16/41] rocket: RK3568 FEATURE_GRAINS formula for narrow
  outputs; vendor add config
 
 FEATURE_GRAINS: the vendor's 51 mobilenet_v1 tasks match
@@ -3078,7 +3078,7 @@ index f8cc5225cb2..cd7e36f1d9c 100644
 From b4ce40f9250b32c60b6d03a8a72f11075695b72a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 17/39] rocket: RK3568 announced DPU channels align(Cout, 16)
+Subject: [PATCH 17/41] rocket: RK3568 announced DPU channels align(Cout, 16)
  without the 32 floor
 
 With align-to-32 the DPU waited for surfaces that never come on Cout=16
@@ -3125,7 +3125,7 @@ index 51c2fe081ab..34b6e7a7948 100644
 From ad0cf46ee7359190aa98a352d595a1300e07ef02 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 18/39] rocket: RK3568 compact weight tails for partial ic
+Subject: [PATCH 18/41] rocket: RK3568 compact weight tails for partial ic
  slices and oc groups
 
 WPOKE byte mapping on mobilenet_v2 op8 (Cin=144, Cout=24): the tail ic
@@ -3228,7 +3228,7 @@ index 28bc7ae7777..c7d9c2e5b27 100644
 From 8e0483fa9db2fc8b987b6930e9f80960293e93f9 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:41:27 +0300
-Subject: [PATCH 19/39] rocket: fused add requants into the ADD output
+Subject: [PATCH 19/41] rocket: fused add requants into the ADD output
  quantization; C%32 gate
 
 The fused conv+add task kept the convolution's output zero point and
@@ -3282,7 +3282,7 @@ index 55eca0e5a2c..33e8de5cb77 100644
 From 3328cf4096546d36bc308c286595f50bea2ee154 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:29:34 +0300
-Subject: [PATCH 20/39] rocket: pad fused-add kernels to align(C, 32); gate
+Subject: [PATCH 20/41] rocket: pad fused-add kernels to align(C, 32); gate
  banded fused adds
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3590,7 +3590,7 @@ index fb6354b8112..357ec8127c5 100644
 From eb1ae174c9b582b1db916b490d5082caf7611964 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 16:33:52 +0300
-Subject: [PATCH 21/39] rocket: 8-byte weight kernel rows are ARGB-only;
+Subject: [PATCH 21/41] rocket: 8-byte weight kernel rows are ARGB-only;
  Cin=4..8 uses 16
 
 The 8-byte kernel row in the weight layout belongs to the packed-RGB
@@ -3628,7 +3628,7 @@ index 5e89dd33a3f..dc59436adb6 100644
 From a2e32845fb3bcb092e8e0e98613e312d1b2f9a74 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 19:10:55 +0300
-Subject: [PATCH 22/39] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
+Subject: [PATCH 22/41] rocket: banded fused-add tasks need RDMA_SURF_NOTCH
 
 The second EW input keeps full-height surfaces, so on a row-band task
 the EW RDMA has to skip the part of each surface that lies outside the
@@ -3766,7 +3766,7 @@ index 357ec8127c5..fb6354b8112 100644
 From 0a91d2180afdcec06dfb3878b3aa69f69d7f17c6 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:36 +0300
-Subject: [PATCH 23/39] rocket: ic slices sit above the taps in the dense
+Subject: [PATCH 23/41] rocket: ic slices sit above the taps in the dense
  weight layout
 
 The order inside a 16-kernel group is [ic-slice][tap][oc%16][ic%32],
@@ -3820,7 +3820,7 @@ index dc59436adb6..0e415e0e80a 100644
 From 180ba4010b592b4f6422420c123414e82dbe1ad1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 20:19:37 +0300
-Subject: [PATCH 24/39] rocket: fuse residual adds into the later producer;
+Subject: [PATCH 24/41] rocket: fuse residual adds into the later producer;
  wire fused RELU
 
 The EW stream of a fused conv+add task reads the other input's tensor
@@ -3984,7 +3984,7 @@ index 2c8e85a8b03..46f84035c89 100644
 From 61b74ab6080f7ffd6c7c7fb7b82d43d91f6b3a7e Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:52:39 +0300
-Subject: [PATCH 25/39] rocket: align feature surfaces to 4 pixels; real fused
+Subject: [PATCH 25/41] rocket: align feature surfaces to 4 pixels; real fused
  relu; dedup job BOs
 
 Three independent fixes from the resnet18 bring-up:
@@ -4262,7 +4262,7 @@ index e031193b3be..ef4b994befd 100644
 From 99248a6a562deb722ae74047b026e01b1e83328c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 22:31:07 +0300
-Subject: [PATCH 26/39] rocket: chain the whole graph into one PC task chain
+Subject: [PATCH 26/41] rocket: chain the whole graph into one PC task chain
  per submit
 
 Link every operation's last regcmd stream to the next operation's first
@@ -4452,7 +4452,7 @@ index 83c05434f66..95cba34361d 100644
 From 0c0cd848559db01bc188480fc39a69c55468dfbb Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 23:54:48 +0300
-Subject: [PATCH 27/39] rocket: vendor single-interrupt scheme; PPU max pooling
+Subject: [PATCH 27/41] rocket: vendor single-interrupt scheme; PPU max pooling
 
 Completion now follows the vendor driver (rknpu_job_subcore_commit_pc):
 only the LAST task's interrupt is unmasked, so a whole chained graph
@@ -5001,7 +5001,7 @@ index ee755e78a97..777ee263762 100644
 From d506ff6a1c30d53abb429d5c142c05b669a157d8 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 12:56:12 +0300
-Subject: [PATCH 28/39] rocket: average pooling on the PPU
+Subject: [PATCH 28/41] rocket: average pooling on the PPU
 
 Average pooling prefers the PPU chunk too: OPERATION_MODE method bits 0
 and RECIP_KERNEL_WIDTH/HEIGHT = 65536/kernel (vendor probe-AP encoding:
@@ -5125,7 +5125,7 @@ index 3ced8c88154..25f69712b11 100644
 From 442b73c90fee297dde24f70791f98ea8ff044da4 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 13:40:16 +0300
-Subject: [PATCH 29/39] rocket: support FULLY_CONNECTED as a 1x1 convolution
+Subject: [PATCH 29/41] rocket: support FULLY_CONNECTED as a 1x1 convolution
 
 A fully-connected layer over a single spatial pixel is exactly a 1x1
 convolution: the TFLite [out, in] weight matrix is bytewise identical
@@ -5266,7 +5266,7 @@ index fb6354b8112..c1275ab0ae7 100644
 From 08ef3da4b21ea476684395ada2f603d26c5fd3fa Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:02:58 +0300
-Subject: [PATCH 30/39] rocket: channel concatenation as addressing
+Subject: [PATCH 30/41] rocket: channel concatenation as addressing
 
 In the planar 8-channel surface layout a channel-wise concatenation is
 pure addressing: each input occupies its own run of surfaces in the
@@ -5643,7 +5643,7 @@ index 25f69712b11..9b8dbd965d4 100644
 From 3dde38866d6582b5a1e854343f1dc534cfbb5146 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 31/39] rocket: size CBUF banks for the declared input channels
+Subject: [PATCH 31/41] rocket: size CBUF banks for the declared input channels
 
 The band splitter counted CBUF entries from the real channel count
 while DATA_SIZE1 declares align(max(C, 16), 16) channels -- and the
@@ -5704,7 +5704,7 @@ index ef4b994befd..584301bdf78 100644
 From 0eb7a1ce93ec1f9e7d64d9aa3130dd8995bfcd6c Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:30:10 +0300
-Subject: [PATCH 32/39] rocket: clip the PPU input cube to the consumed rows
+Subject: [PATCH 32/41] rocket: clip the PPU input cube to the consumed rows
  and columns
 
 The PPU derives its window count from the input cube, rounding up: fed
@@ -5779,7 +5779,7 @@ index 9b8dbd965d4..d8ba5309b15 100644
 From db7ec18b86685adce11466ebcf3a70753fbf0c68 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 14:47:48 +0300
-Subject: [PATCH 33/39] rocket: fix depthwise convolutions with fewer than 32
+Subject: [PATCH 33/41] rocket: fix depthwise convolutions with fewer than 32
  channels
 
 Two mismatches against the vendor stream, found with offline-decoded
@@ -5866,7 +5866,7 @@ index 584301bdf78..5bc892b9cce 100644
 From d2c731a0b017172e427d5669e0e9ec8c78de3d04 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 16:22:54 +0300
-Subject: [PATCH 34/39] rocket: fix the axis convention -- width is the
+Subject: [PATCH 34/41] rocket: fix the axis convention -- width is the
  contiguous memory row
 
 The driver read dims[1] as width and dims[2] as height, but the input
@@ -6064,7 +6064,7 @@ index ca237abdbda..083fbae91cf 100644
 From c53a1ee10c4a37559d1f2a155cd90cce5dbeda5a Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:17:04 +0300
-Subject: [PATCH 35/39] rocket: lower the concat identity copy as depthwise
+Subject: [PATCH 35/41] rocket: lower the concat identity copy as depthwise
  when channels allow
 
 The identity copy into a concat output slice was a pointwise
@@ -6160,7 +6160,7 @@ index 083fbae91cf..ca0ec8cd832 100644
 From b79f837a1626443990401ec9ff4cc4640655d3d1 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 18:23:59 +0300
-Subject: [PATCH 36/39] rocket: host a leading max pool's PPU chunk in an
+Subject: [PATCH 36/41] rocket: host a leading max pool's PPU chunk in an
  identity-copy carrier
 
 A PPU pool chunk compiles into the regcmd BO of the operation right
@@ -6256,7 +6256,7 @@ index ca0ec8cd832..aa2aef54da4 100644
 From b53692820eed3378ae5c372034d808308d8f378b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 20:38:15 +0300
-Subject: [PATCH 37/39] rocket/teflon: support INT8 tensors and per-channel
+Subject: [PATCH 37/41] rocket/teflon: support INT8 tensors and per-channel
  weight quantization
 
 INT8 is folded into the driver's uint8 domain at the edges: teflon
@@ -6615,7 +6615,7 @@ index c1275ab0ae7..bf3ad0c1f4c 100644
 From ef7af777701a697dd0ce4889b1cc563dc6151b40 Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 21:29:40 +0300
-Subject: [PATCH 38/39] rocket: survive an ADD whose inputs both come from
+Subject: [PATCH 38/41] rocket: survive an ADD whose inputs both come from
  outside the partition
 
 A yolo-style partition can OPEN with an ADD: both inputs then have no
@@ -6830,7 +6830,7 @@ index 4afc2b63ef0..afa33b1ef14 100644
 From 4c05b9fbe5b10196fcc45585776fb545d41ae72b Mon Sep 17 00:00:00 2001
 From: Igor Velkov <325961+iav@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 22:10:09 +0300
-Subject: [PATCH 39/39] rocket: fix the two defects behind the standalone-ADD
+Subject: [PATCH 39/41] rocket: fix the two defects behind the standalone-ADD
  mismatch
 
 1. A depthwise host for a fused addition reads the EW operand with the
@@ -7064,6 +7064,717 @@ index afa33b1ef14..f18133a1f16 100644
        /* The second-input tensor keeps full-height surfaces regardless of
         * banding, so the EW surface stride spans the full tensor height
         * even on a band task (vendor probe-ADDB: 0x6200 on both bands of a
+-- 
+2.53.0
+
+
+From 8fb3fa0020096ad83fd3215c0302355f9fbf46d1 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 14:49:12 +0300
+Subject: [PATCH 40/41] rocket: drop the dead RE probes, keep the documented
+ debug knobs
+
+Remove the environment probes whose answers are already baked into the
+code (RKT_BSCFG RKT_DESC_AM RKT_ENTV RKT_FEAT4000 RKT_GRAINS
+RKT_GRAINS_OLD RKT_NO_DESC RKT_NO_FC RKT_NOWDMA RKT_NO_WREUSE
+RKT_OUTALIGN RKT_PPU_MODE RKT_PPU_UNITEN RKT_PROBE RKT_STRICT
+RKT_VENDOR_OVR RKT_WK RKT_WLAY RKT_WPOKE), the vendor-override table for
+the MR !42134 reference conv, the two candidate weight layouts, the
+synthetic BS-stream probes, and the disabled depthwise channel-doubling
+block.  Comments that recorded the experiments are rewritten as
+statements of what RK3568 does; the RE dates stay as the pointer into
+the log.
+
+Remaining knobs, all deliberate: RKT_DUMP (command stream to stderr),
+RKT_WDUMP=<file> (packed weights), RKT_NO_CHAIN (per-operation jobs),
+RKT_NO_PPU (pooling via the depthwise lowering), RKT_MULSH (OUT_CVT
+scale shift), RKT_MAXROWS (band height cap), RKT_POOL_INT_MASK.
+
+Regression unchanged: layer suites (uint8/int8) at the known maxima,
+mobilenet_v1/v2 and resnet18 bitwise, yolov8n_int8 runs.
+---
+ src/gallium/drivers/rocket/rkt_coefs.c  |  63 +-------------
+ src/gallium/drivers/rocket/rkt_ml.c     |  17 +---
+ src/gallium/drivers/rocket/rkt_regcmd.c | 111 ++++++------------------
+ src/gallium/drivers/rocket/rkt_task.c   |  31 +++----
+ 4 files changed, 42 insertions(+), 180 deletions(-)
+
+diff --git a/src/gallium/drivers/rocket/rkt_coefs.c b/src/gallium/drivers/rocket/rkt_coefs.c
+index 165e8ac52df..8caff374bb2 100644
+--- a/src/gallium/drivers/rocket/rkt_coefs.c
++++ b/src/gallium/drivers/rocket/rkt_coefs.c
+@@ -34,8 +34,7 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+ 
+    input_channels = MAX2(input_channels, FEATURE_ATOMIC_SIZE);
+ 
+-   /* TEST (iav RE 2026-08-22): RK3568 half-width weight atomic experiment */
+-   unsigned watom = getenv("RKT_WK") ? atoi(getenv("RKT_WK")) : WEIGHT_ATOMIC_SIZE;
++   unsigned watom = WEIGHT_ATOMIC_SIZE;
+ 
+    output_channels = align(output_channels, 2);
+    if (rkt_is_depthwise(poperation))
+@@ -167,37 +166,6 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
+       assert(n <= weights_size);
+       goto packed;
+    }
+-   /* TEST (iav RE 2026-08-22): RKT_WLAY=1 — candidate RK3568 layout
+-    * [kernel group of 16][tap y*3+x][oc2 0..15][ic]. */
+-   if (getenv("RKT_WLAY") && atoi(getenv("RKT_WLAY")) == 2) {
+-      /* плоская укладка [oc][ty][tx][ic] для картирования */
+-      for (int oc = 0; oc < output_channels; oc++)
+-         for (int y = 0; y < weights_height; y++)
+-            for (int x = 0; x < weights_width; x++)
+-               for (int ic = 0; ic < input_channels; ic++)
+-                  weights_out[n++] =
+-                     (oc < output_channels_real && ic < input_channels_real)
+-                        ? weights_in[oc][x][y][ic] - 0x80 : 0;
+-      goto packed;
+-   }
+-   if (getenv("RKT_WLAY")) {
+-      for (int oc1 = 0; oc1 < DIV_ROUND_UP(output_channels, 16); oc1++) {
+-         for (int y = 0; y < weights_height; y++) {
+-            for (int x = 0; x < weights_width; x++) {
+-               for (int oc2 = 0; oc2 < 16; oc2++) {
+-                  for (int ic = 0; ic < input_channels; ic++) {
+-                     unsigned oc = oc1 * 16 + oc2;
+-                     if (oc >= output_channels_real || ic >= input_channels_real)
+-                        weights_out[n++] = 0;
+-                     else
+-                        weights_out[n++] = weights_in[oc][x][y][ic] - 0x80;
+-                  }
+-               }
+-            }
+-         }
+-      }
+-      goto packed;
+-   }
+    for (int oc1 = 0; oc1 < DIV_ROUND_UP(output_channels, watom);
+         oc1++) {
+       for (int ic1 = 0; ic1 < input_channels_1; ic1++) {
+@@ -235,16 +203,6 @@ packed:
+       FILE *f = fopen(getenv("RKT_WDUMP"), "wb");
+       if (f) { fwrite(weights_out, 1, weights_size, f); fclose(f); }
+    }
+-   /* TEST (iav RE 2026-08-22): RKT_WPOKE=<byte offset> — обнулить всю
+-    * упаковку и поставить один байт 127: выход покажет, какой (oc,tap,ic)
+-    * этот байт кормит. */
+-   if (getenv("RKT_WPOKE")) {
+-      unsigned off = strtoul(getenv("RKT_WPOKE"), NULL, 0);
+-      memset(weights_out, 0, weights_size);
+-      if (off < weights_size)
+-         weights_out[off] = 127;
+-   }
+-
+    if (DBG_ENABLED(ROCKET_DBG_DUMP_BOS)) {
+       static int task = 0;
+       rkt_dump_buffer(weights_out, "weights", 0, task++, 0, weights_size);
+@@ -356,7 +314,6 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+             bias32[j] = 0;
+             ow16[j] = 0;
+             mul16[j] = 1 << 14;
+-         ow16[j] = 0; /* PROBE4 */
+             continue;
+          }
+ 
+@@ -371,24 +328,6 @@ rkt_fill_biases(struct rkt_ml_subgraph *subgraph,
+          mul16[j] = (uint16_t)lrintf((wscales[oc] / s_wmax) * (1 << 14));
+          if (getenv("RKT_MULSH"))
+             mul16[j] = 1 << (14 - atoi(getenv("RKT_MULSH")));
+-         if (getenv("RKT_WPOKE")) {
+-            bias32[j] = 0; ow16[j] = 0; mul16[j] = 1 << 14;
+-         }
+-         /* TEST probes: RKT_PROBE selects synthetic stream contents */
+-         if (getenv("RKT_PROBE")) {
+-            int pr = atoi(getenv("RKT_PROBE"));
+-            uint16_t *slots = (uint16_t *)(stream + g * 32);
+-            unsigned k;
+-            switch (pr) {
+-            case 1: /* staircase bias, ow 0, mul 1<<14 */
+-               bias32[j] = (oc + 1) * 2048; ow16[j] = 0; mul16[j] = 1 << 14;
+-               break;
+-            case 5: /* globally unique small u16 in every slot */
+-               for (k = 0; k < 16; k++)
+-                  slots[k] = 4 * (g * 16 + k + 1);
+-               break;
+-            }
+-         }
+       }
+    }
+ 
+diff --git a/src/gallium/drivers/rocket/rkt_ml.c b/src/gallium/drivers/rocket/rkt_ml.c
+index 9cae43b52c4..e70bce47734 100644
+--- a/src/gallium/drivers/rocket/rkt_ml.c
++++ b/src/gallium/drivers/rocket/rkt_ml.c
+@@ -600,18 +600,6 @@ rkt_ml_operation_supported(struct pipe_ml_device *pdevice,
+           operation->conv.dilation_height_factor == 1)
+          supported = true;
+ 
+-      /* RK3568: a fully-connected-shaped convolution whose weights exceed
+-       * the 256 KiB CBUF (e.g. the final 1024->1001 1x1 of mobilenet_v1)
+-       * needs the vendor fp16 FC mode, which is not implemented yet -- the
+-       * current conv path wedges on it (job timeout). */
+-      {
+-         unsigned kernels = weight_tensor->dims[0];
+-         unsigned wbytes = kernels * weight_tensor->dims[1] *
+-                           weight_tensor->dims[2] * weight_tensor->dims[3];
+-         if (wbytes > 7 * CBUF_BANK_SIZE && getenv("RKT_NO_FC"))
+-            supported = false;
+-      }
+-
+       break;
+    }
+    case PIPE_ML_OPERATION_TYPE_ADD:
+@@ -1425,7 +1413,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+          /* RK3568 PC task-DMA mode (vendor rknpu_job): build the 40-byte
+           * descriptor array so the PC unit walks the whole chain itself --
+           * no CPU stepping between tasks, no ping-pong config races. */
+-         if (!getenv("RKT_NO_DESC") && task_count > 0) {
++         if (task_count > 0) {
+             struct pc_task_desc {
+                uint32_t flags, op_idx, enable_mask, int_mask, int_clear,
+                         int_status, regcfg_amount, regcfg_offset;
+@@ -1446,8 +1434,7 @@ rkt_ml_subgraph_invoke(struct pipe_context *pcontext,
+                d[ti].int_mask = 0x300;
+                d[ti].int_clear = 0x1ffff;
+                d[ti].int_status = 0;
+-               d[ti].regcfg_amount = t->regcfg_amount - 1 +
+-                  (getenv("RKT_DESC_AM") ? atoi(getenv("RKT_DESC_AM")) : 0);
++               d[ti].regcfg_amount = t->regcfg_amount - 1;
+                d[ti].regcfg_offset = 0;
+                d[ti].regcmd_addr = t->regcfg_addr;
+                ti++;
+diff --git a/src/gallium/drivers/rocket/rkt_regcmd.c b/src/gallium/drivers/rocket/rkt_regcmd.c
+index f18133a1f16..54a8097b616 100644
+--- a/src/gallium/drivers/rocket/rkt_regcmd.c
++++ b/src/gallium/drivers/rocket/rkt_regcmd.c
+@@ -18,39 +18,19 @@ emit_raw(struct util_dynarray *regs, uint32_t target, uint32_t reg,
+ 
+    util_dynarray_append(regs, packed_value);
+ 
+-   /* TEST (iav RE, 2026-08-21): RKT_DUMP=1 prints the emitted command stream so
+-    * it can be diffed against the vendor stream extracted from a .rknn. */
++   /* RKT_DUMP=1 prints the emitted command stream so it can be diffed
++    * against the vendor stream extracted from a .rknn (tools/rknn_diff.py). */
+    if (getenv("RKT_DUMP"))
+       fprintf(stderr, "rkt regcmd %016llx\n", (unsigned long long)packed_value);
+ }
+ 
+-/* TEST (iav/droid RE session): optional overrides with the vendor-exact
+- * values for THE reference conv2d (80x80x16 -> 40x40x128, 5x5 s2) from the
+- * MR !42134 byte-exact diff table.  Enabled with RKT_VENDOR_OVR=1.
+- */
+ #include <stdlib.h>
+ #include <stdio.h>
+-static const struct { uint32_t reg; uint32_t val; } rkt_test_ovr[] = {
+-   { 0x1010, 0x00000070 },  /* CNA_CONV_CON2 */
+-   { 0x1018, 0x00000000 },  /* CNA_CONV_CON4 */
+-   { 0x1044, 0x00500028 },  /* CNA_CBUF_CON1 */
+-   { 0x1078, 0x00171c07 },  /* CNA_DMA_CON0 */
+-   /* 0x107c, 0x1080, 0x40c0 removed: now produced by proper formulas in
+-    * rkt_task.c (line_stride=Win, surf_stride=Win*Hin, surf_add=Wout*Hout). */
+-};
+ 
+ static void
+ emit(struct util_dynarray *regs, uint32_t reg, uint32_t value)
+ {
+    uint32_t target = rkt_get_target(reg) + 0x1;
+-   if (getenv("RKT_VENDOR_OVR")) {
+-      for (unsigned i = 0; i < ARRAY_SIZE(rkt_test_ovr); i++) {
+-         if (rkt_test_ovr[i].reg == reg) {
+-            value = rkt_test_ovr[i].val;
+-            break;
+-         }
+-      }
+-   }
+    emit_raw(regs, target, reg, value);
+ }
+ 
+@@ -77,11 +57,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+        * reuse bit). */
+       struct split_task *prev = util_dynarray_element(
+          &operation->tasks, struct split_task, task_num - 1);
+-      /* TEST (iav RE 2026-08-23): RKT_NO_WREUSE=1 disables the CBUF weight
+-       * reuse bit on follow-up band tasks — probing the band-2 constant
+-       * output on small-weight convs (mobilenet_v2 op2, 512 B). */
+-      if (prev->channel_group == task->channel_group &&
+-          !getenv("RKT_NO_WREUSE"))
++      if (prev->channel_group == task->channel_group)
+          con0 |= CNA_CBUF_CON0_WEIGHT_REUSE(1);
+    }
+ 
+@@ -134,7 +110,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * for int8 mode (32 kernels per group). FEATURE_GRAINS per TRM formula
+     * = y_stride + weight_height + 1 (suggested by TRM). The old "+50" value
+     * was a hack — TRM-correct formula tested 2026-05-21. */
+-   /* TEST (iav RE, 2026-08-21): the vendor leaves KERNEL_GROUP at zero in all
++   /* RK3568 (RE 2026-08-21): the vendor leaves KERNEL_GROUP at zero in all
+     * 51 tasks of mobilenet_v1, including layers with 512 and 1001 kernels.
+     * Mesa's kernels/32 - 1 underflows to 0xff on depthwise, where kernels is
+     * 1 -- and depthwise is exactly what stalls after CNA. */
+@@ -145,19 +121,16 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * run unstable).  The vendor's 51 mobilenet_v1 tasks all match
+     *   stride_y + kh + stride_y * ((Wout < 28) + (Wout < 14))
+     * (1x1: 2/3/4 for W>=28/14/7; dw s1: 4/5/6; dw s2: 5/7/9), except the
+-    * Wout==1 cases (FC=1, avgpool=kh) which keep their special values.
+-    * RKT_GRAINS overrides for probing. */
++    * Wout==1 cases (FC=1, avgpool=kh) which keep their special values. */
+    unsigned grains;
+    if (task->input_width == 1 && task->input_height == 1)
+       grains = 1;
+    else {
+       grains = task->stride_y + task->weights_height;
+-      if (task->output_width > 1 && !getenv("RKT_GRAINS_OLD"))
++      if (task->output_width > 1)
+          grains += task->stride_y * ((task->output_width < 28 ? 1 : 0) +
+                                      (task->output_width < 14 ? 1 : 0));
+    }
+-   if (getenv("RKT_GRAINS"))
+-      grains = atoi(getenv("RKT_GRAINS"));
+    EMIT(REG_CNA_CONV_CON2, CNA_CONV_CON2_FEATURE_GRAINS(grains));
+    EMIT(REG_CNA_CONV_CON3, CNA_CONV_CON3_CONV_X_STRIDE(task->stride_x) |
+                               CNA_CONV_CON3_CONV_Y_STRIDE(task->stride_y));
+@@ -168,9 +141,8 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * register MUST be non-zero or CNA's OP_ENABLE entry is rejected.
+     * Use input_width * input_height * input_channels as a safe per-task
+     * input byte count. */
+-   /* TEST (iav RE, 2026-08-21): the vendor writes RGB_BYTELENGTH only for the
+-    * ARGB first layer and leaves this at zero everywhere else. */
+-   /* ARGB: the vendor writes W * H * 9 here for the RGB first layer. */
++   /* RK3568 (RE 2026-08-21): the vendor writes RGB_BYTELENGTH (W * H * 9)
++    * only for the ARGB first layer and leaves it at zero everywhere else. */
+    EMIT(REG_CNA_CONV_CON4,
+         task->input_channels_real == 3
+            ? CNA_CONV_CON4_RGB_BYTELENGTH(task->input_width *
+@@ -200,15 +172,13 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_CNA_CBUF_CON0, con0);
+ 
+-   /* TEST (iav RE, 2026-08-21): the upper half of CBUF_CON1 carries the input
++   /* RK3568 (RE 2026-08-21): the upper half of CBUF_CON1 carries the input
+     * width in the vendor stream (0x00500028 for the 80-wide reference conv). */
+    emit_raw(regs, CNA | 0x1, REG_CNA_CBUF_CON1,
+             ((task->input_channels_real == 3 ? align(task->input_width, 32)
+                                              : task->input_width)
+              << 16) |
+-               (getenv("RKT_ENTV")
+-                   ? task->input_width * task->input_channels / 32
+-                   : task->input_data_entries));
++               task->input_data_entries);
+ 
+    if (task->input_channels_real == 3) {
+       /* ARGB CVT: (x - 128) * 16384 >> 14 = x - 128 -- shift the raw uint8
+@@ -246,7 +216,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       EMIT(REG_CNA_CVT_CON4,
+            CNA_CVT_CON4_CVT_SCALE3(scale) | CNA_CVT_CON4_CVT_OFFSET3(offset));
+    } else {
+-      /* TEST (iav RE, 2026-08-21): the vendor writes 0xa here for all 42
++      /* RK3568 (RE 2026-08-21): the vendor writes 0xa here for all 42
+        * non-ARGB tasks of mobilenet_v1 -- DATA_SIGN and CVT_TYPE set, but
+        * CVT_BYPASS clear.  The converter stays in the path. */
+       EMIT(REG_CNA_CVT_CON0, CNA_CVT_CON0_DATA_SIGN(1) |
+@@ -259,7 +229,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+ 
+    EMIT(REG_CNA_FC_CON0, 0);
+    EMIT(REG_CNA_FC_CON1, 0);
+-   /* TEST (iav RE, 2026-08-21): on RK3568 the pad value lives in the upper half
++   /* RK3568 (RE 2026-08-21): the pad value lives in the upper half
+     * of PAD_CON0, not in the separate PAD_CON1 register registers.xml lists --
+     * the vendor never writes 0x1184 at all.  Its PAD_CON0 is 0xff800000 /
+     * 0xff800011 for every layer whose input zero point is 0 (that is -128 once
+@@ -281,7 +251,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * length. Mesa previously omitted this field, leaving it 0 which causes
+     * CNA to fetch zero feature data per surface on RK3568. Set to input
+     * width as a safe default — matches per-row fetch count. */
+-   /* TEST (iav RE, 2026-08-21): the vendor writes the same 0x00171c07 here in
++   /* RK3568 (RE 2026-08-21): the vendor writes the same 0x00171c07 here in
+     * all 44 convolution tasks of mobilenet_v1 and all 23 of resnet18, across
+     * every geometry -- FETCH_PIXEL_LEN is a constant 28, not input_width, and
+     * both burst lengths are 7, not 15. */
+@@ -333,11 +303,6 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       emit_raw(regs, CNA | 0x1, 0x1134, 0);          /* DCOMP_AMOUNT1 */
+       emit_raw(regs, CNA | 0x1, 0x1138, 0);          /* DCOMP_AMOUNT2 */
+       emit_raw(regs, CNA | 0x1, 0x113c, 0);          /* DCOMP_AMOUNT3 */
+-   if (getenv("RKT_STRICT")) {
+-      unsigned r;
+-      for (r = 0x1210; r <= 0x1230; r += 4)
+-         emit_raw(regs, CNA | 0x1, r, 0);
+-   }
+       emit_raw(regs, CNA | 0x1, 0x1140, 0);          /* DCOMP_AMOUNT4 */
+       emit_raw(regs, CNA | 0x1, 0x1144, 0);          /* DCOMP_AMOUNT5 */
+       emit_raw(regs, CNA | 0x1, 0x1148, 0);          /* DCOMP_AMOUNT6 */
+@@ -369,7 +334,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    if (operation->depthwise)
+       misc_cfg |= CORE_MISC_CFG_DW_EN(1);
+ 
+-   /* TEST (iav RE, 2026-08-21): on RK3568 the CORE block map is one slot lower
++   /* RK3568 (RE 2026-08-21): the CORE block map is one slot lower
+     * than registers.xml claims -- the xml has a spurious MAC_GATING at 0x300c
+     * which shifts everything after it.  The vendor command stream (all 44
+     * convolution tasks of mobilenet_v1) writes:
+@@ -380,7 +345,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+     * CLIP_TRUNCATE (real 0x3018) is not written at all.
+     * With the xml offsets mesa told CORE its output was 3 wide and 1 high,
+     * so CORE produced nothing and the DPU interrupt never arrived. */
+-   /* TEST (iav RE, 2026-08-21): CMAC MISC_CFG sits at 0x200c, the same slot
++   /* RK3568 (RE 2026-08-21): CMAC MISC_CFG sits at 0x200c, the same slot
+     * within its block as CORE's at 0x300c.  The vendor sets QD_EN there for
+     * every task and adds DW_EN for depthwise; mesa never wrote it at all. */
+    emit_raw(regs, 0x401, 0x200c, operation->depthwise ? 0x3 : 0x1);
+@@ -420,7 +385,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+            task->channel_group *
+               rkt_surf_px(operation->output_width * operation->output_height) *
+               32);
+-   /* TEST (iav RE, 2026-08-21): the vendor stream carries output_width *
++   /* RK3568 (RE 2026-08-21): the vendor stream carries output_width *
+     * output_height / 2 here, half of what mesa emits, on all 44 convolution
+     * tasks of mobilenet_v1 (checked against the full output tensor, not the
+     * per-task band).  DPU_SURFACE_ADD at 0x40c0 keeps the undivided value. */
+@@ -447,9 +412,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       /* Full [bias][ow][mul] BS stream (vendor scheme, RE 2026-08-22):
+        * BS_CFG 0x148, multiplier from the stream with shift 14 (0xe01),
+        * OW source = stream (0x125 conv / 0x36d dw), OW_OP unused. */
+-      EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG")
+-                              ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16)
+-                              : 0x148);
++      EMIT(REG_DPU_BS_CFG, 0x148);
+       EMIT(REG_DPU_BS_ALU_CFG, 0);
+       emit_raw(regs, DPU | 0x1, REG_DPU_BS_MUL_CFG, 0xe01);
+       EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
+@@ -457,7 +420,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+                operation->depthwise ? 0x36d : 0x125);
+       EMIT(REG_DPU_BS_OW_OP, 0);
+    } else {
+-      EMIT(REG_DPU_BS_CFG, getenv("RKT_BSCFG") ? (uint32_t)strtoul(getenv("RKT_BSCFG"), NULL, 16) : 0x158);
++      EMIT(REG_DPU_BS_CFG, 0x158);
+       EMIT(REG_DPU_BS_ALU_CFG, 0);
+       EMIT(REG_DPU_BS_MUL_CFG, 0);
+       EMIT(REG_DPU_BS_RELUX_CMP_VALUE, 0);
+@@ -475,13 +438,11 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+       EMIT(REG_DPU_BS_OW_OP, DPU_BS_OW_OP_OW_OP(0x80 - weights_zero_point));
+    }
+ 
+-   if (!getenv("RKT_NOWDMA")) {
+-      EMIT(REG_DPU_WDMA_SIZE_0,
+-           DPU_WDMA_SIZE_0_CHANNEL_WDMA(task->output_channels - 1));
+-      EMIT(REG_DPU_WDMA_SIZE_1,
+-           DPU_WDMA_SIZE_1_HEIGHT_WDMA(task->output_height - 1) |
+-              DPU_WDMA_SIZE_1_WIDTH_WDMA(task->output_width - 1));
+-   }
++   EMIT(REG_DPU_WDMA_SIZE_0,
++        DPU_WDMA_SIZE_0_CHANNEL_WDMA(task->output_channels - 1));
++   EMIT(REG_DPU_WDMA_SIZE_1,
++        DPU_WDMA_SIZE_1_HEIGHT_WDMA(task->output_height - 1) |
++           DPU_WDMA_SIZE_1_WIDTH_WDMA(task->output_width - 1));
+    if (operation->relu) {
+       /* Fused relu/relu6 the vendor way (mobilenet_v1 t0: BN_CFG 0x92,
+        * RELUX_CMP 6/(si*sw)): the BN stage clamps the accumulator to
+@@ -628,7 +589,7 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+    EMIT(REG_DPU_RDMA_RDMA_BS_BASE_ADDR,
+         rkt_resource(operation->biases)->phys_addr +
+            task->channel_group * 32 * (operation->per_channel ? 8 : 4));
+-   /* TEST (iav RE, 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
++   /* RK3568 (RE 2026-08-21): DPU_RDMA 0x5024 sits right after BS_BASE_ADDR
+     * and is absent from registers.xml, so mesa never writes it.  The vendor
+     * stream in every .rknn writes output_channels - 1 there for all 51 tasks
+     * of mobilenet_v1 (10 distinct values, all matching).  Without it the bias
+@@ -675,11 +636,8 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
+        * three-operand BRDMA stream (DATA_USE=7) the old BURST_LEN=15 |
+        * MRDMA_DISABLE combination scrambles which stream halfword lands in
+        * which BS operand lane. */
+-      if (getenv("RKT_FEAT4000"))
+-         rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(8);
+-      else
+-         rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
+-                               DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
++      rdma_feat_mode_cfg |= DPU_RDMA_RDMA_FEATURE_MODE_CFG_BURST_LEN(15) |
++                            DPU_RDMA_RDMA_FEATURE_MODE_CFG_MRDMA_DISABLE(1);
+    }
+ 
+    if (operation->depthwise)
+@@ -802,13 +760,8 @@ rkt_fill_ppu_regcmd(struct rkt_ml_subgraph *subgraph,
+    PPU_WORD(PPU_TARGET, out_h - 1, 0x601c);
+    PPU_WORD(PPU_TARGET, channels - 1, 0x6020);
+    /* OPERATION_MODE_CFG: [1:0] method (0 avg / 1 max), [4] the vendor's
+-    * flying bit (set even though the input goes through PPU_RDMA --
+-    * RKT_PPU_MODE overrides for experiments). */
+-   PPU_WORD(PPU_TARGET,
+-            getenv("RKT_PPU_MODE")
+-               ? strtol(getenv("RKT_PPU_MODE"), NULL, 0)
+-               : (operation->pool_avg ? 0x10 : 0x11),
+-            0x6024);
++    * flying bit (set even though the input goes through PPU_RDMA). */
++   PPU_WORD(PPU_TARGET, operation->pool_avg ? 0x10 : 0x11, 0x6024);
+    PPU_WORD(PPU_TARGET,
+             (operation->stride - 1) << 20 | (operation->stride - 1) << 16 |
+                (operation->weights_height - 1) << 8 |
+@@ -850,14 +803,6 @@ rkt_fill_ppu_regcmd(struct rkt_ml_subgraph *subgraph,
+    PPU_WORD(PPU_RDMA_TARGET, in_surf, 0x7028);  /* SRC_SURF_STRIDE */
+    PPU_WORD(PPU_RDMA_TARGET, 0, 0x7030);        /* RDMA_DATA_FORMAT */
+ 
+-   /* Experiment knob: explicit per-unit OP_ENABLE words before the tail
+-    * (the conv units must start via the broadcast, but the PPU pair may
+-    * need its own). */
+-   if (getenv("RKT_PPU_UNITEN")) {
+-      PPU_WORD(PPU_RDMA_TARGET, 0x1, 0x7008);
+-      PPU_WORD(PPU_TARGET, 0x1, 0x6008);
+-   }
+-
+    /* PC tail: address/amount patched by the cross-operation chain; the
+     * broadcast starts PPU + PPU_RDMA (units 5 and 6). */
+    EMIT(REG_PC_BASE_ADDRESS, 0);
+diff --git a/src/gallium/drivers/rocket/rkt_task.c b/src/gallium/drivers/rocket/rkt_task.c
+index 5bc892b9cce..be449b9882c 100644
+--- a/src/gallium/drivers/rocket/rkt_task.c
++++ b/src/gallium/drivers/rocket/rkt_task.c
+@@ -69,10 +69,10 @@ calc_weights_banks(struct rkt_operation *operation)
+    entries = DIV_ROUND_UP(bytes, CBUF_ENTRY_SIZE);
+    banks = DIV_ROUND_UP(entries, CBUF_ENTRIES_PER_BANK);
+ 
+-   /* TEST (iav RE, 2026-08-21): the vendor gives this layer one weight bank and
+-    * seven data banks (CBUF_CON0 0x17); with the extra bank mesa keeps two and
+-    * six, and the 224-wide RGB layer then stalls on its second band. */
+-   /* banks++; */
++   /* RK3568 (RE 2026-08-21): no spare weight bank.  The vendor gives the
++    * 224-wide RGB first layer one weight bank and seven data banks
++    * (CBUF_CON0 0x17); with an extra weight bank mesa kept two and six, and
++    * that layer stalled on its second band. */
+ 
+    return banks;
+ }
+@@ -125,7 +125,7 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+     * (mobilenet_v2 RE 2026-08-23).  The old align-to-32 made the DPU wait
+     * for surfaces that never come on Cout=16 convs, so every band task
+     * after the first produced nothing (op2).  Matches the vendor's FC task
+-    * too (mobilenet_v1 t50: 1001 -> 1008).  RKT_OUTALIGN overrides. */
++    * too (mobilenet_v1 t50: 1001 -> 1008). */
+    task->output_channels = align(MAX2(oc_eff, 16), 16);
+    /* Depthwise announces the full 32-wide group even when fewer channels
+     * are real (vendor probe-DW16k1: ORIG_CHANNEL=15, CHANNEL=31, CORE
+@@ -134,24 +134,15 @@ fill_task(struct rkt_ml_subgraph *subgraph,
+     * 2026-08-24, layer-dw1x1 C=16). */
+    if (operation->depthwise)
+       task->output_channels = align(MAX2(oc_eff, 32), 32);
+-   if (getenv("RKT_OUTALIGN")) {
+-      unsigned a = atoi(getenv("RKT_OUTALIGN"));
+-      task->output_channels = align(oc_eff, a);
+-   }
+    if (operation->depthwise && operation->input_channels > 32) {
+       task->output_channels_real = 32;
+       task->output_channels = 32;
+    }
+-   /* TEST (iav RE, 2026-08-21): RK3568 wants the real channel count on
+-    * depthwise.  The vendor stream carries 32 channels for every 32-channel
+-    * depthwise layer of mobilenet_v1 (DPU_DATA_CUBE_CHANNEL 0x001f001f),
+-    * while this doubling made mesa announce 64 to the DPU, which then waited
+-    * for data that never arrived and stalled right after CNA. */
+-   if (operation->depthwise && false) {
+-      if (task->output_channels_real <= 32)
+-         task->output_channels *= 2;
+-      task->output_channels = align(task->output_channels, 64);
+-   }
++   /* RK3568 (RE 2026-08-21): depthwise announces the real channel count.
++    * The vendor stream carries 32 channels for every 32-channel depthwise
++    * layer of mobilenet_v1 (DPU_DATA_CUBE_CHANNEL 0x001f001f); the RK3588
++    * path's doubling announced 64 to the DPU, which then waited for data
++    * that never arrived and stalled right after CNA. */
+ 
+    task->output_zero_point = operation->output_zero_point;
+    task->output_scale = operation->output_scale;
+@@ -416,7 +407,7 @@ rkt_split_tasks(struct rkt_ml_subgraph *subgraph,
+          1;
+       cur_task->atomic_count = cur_task->output_width * cur_task->output_height;
+ 
+-      /* TEST (iav RE, 2026-08-22): trim the band to the rows the convolution
++      /* RK3568 (RE 2026-08-22): trim the band to the rows the convolution
+        * actually consumes.  Taking every available CBUF slice leaves a spare
+        * input row whenever the slice count is not congruent to the kernel
+        * height modulo the stride -- for the 224-wide first layer of
+-- 
+2.53.0
+
+
+From 74c04966edcc08f611684cc0c3d8ad0428c7b5c5 Mon Sep 17 00:00:00 2001
+From: Igor Velkov <325961+iav@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 14:51:46 +0300
+Subject: [PATCH 41/41] rocket: add README-rk3568.md, a map of the RK3568 path
+ for the next reader
+
+Data flow through the delegate, the memory conventions (axes, 8-channel
+surfaces, weight layout, int8), the DPU BS-stream requantization, a
+table of the settings that look arbitrary but are load-bearing (each
+with the lab-log test that established it), the debug knobs and the
+method that found the bugs, and what the kernel module changes.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ src/gallium/drivers/rocket/README-rk3568.md | 158 ++++++++++++++++++++
+ 1 file changed, 158 insertions(+)
+ create mode 100644 src/gallium/drivers/rocket/README-rk3568.md
+
+diff --git a/src/gallium/drivers/rocket/README-rk3568.md b/src/gallium/drivers/rocket/README-rk3568.md
+new file mode 100644
+index 00000000000..49ca261ff0d
+--- /dev/null
++++ b/src/gallium/drivers/rocket/README-rk3568.md
+@@ -0,0 +1,158 @@
++# rocket on RK3568 — a map for the next reader
++
++This branch makes the Mesa `rocket` gallium driver (Teflon/TFLite
++delegate) drive the single-core RK3568 NPU.  The RK3588 path it started
++from is MR !42134; everything RK3568-specific was derived by comparing
++our command streams byte-for-byte against captured vendor (librknnrt)
++streams.  This file records what is *not* obvious from the code: the
++data flow, the memory conventions, and the list of things that look
++arbitrary but are load-bearing.  "Test N" refers to the author's lab
++log (RE-LOG.md, in Russian, kept with https://github.com/iav/rk3568-npu);
++the register names follow `registers.xml`.
++
++## 1. Data flow
++
++```
++teflon (TFLite delegate)
++  └─ rkt_ml_operation_supported()           rkt_ml.c   what we take
++  └─ rkt_ml_subgraph_create()               rkt_ml.c
++       ├─ lower_*()                          one rkt_operation per NPU op:
++       │    lower_convolution      conv / depthwise (+fused add, +relu)
++       │    lower_pooling          avg pool -> depthwise conv, const weights
++       │    lower_max_pooling      max/avg pool -> PPU chunk (pool_avg)
++       │    lower_fully_connected  FC -> 1x1 conv over a 1x1 map
++       │    lower_identity_copy    1x1 conv with unit weights (concat legs,
++       │                           add hosts, pool-first carriers)
++       ├─ rkt_split_tasks()                 rkt_task.c   bands x channel groups
++       ├─ rkt_fill_weights / rkt_fill_biases rkt_coefs.c  packed weights, BS stream
++       ├─ compile_operation()               rkt_ml.c     one regcmd BO per op
++       │    rkt_fill_regcmd()               rkt_regcmd.c conv task (CNA/CMAC/CORE/DPU)
++       │    rkt_fill_ppu_regcmd()           rkt_regcmd.c PPU chunk, appended to the
++       │                                                 PREVIOUS task's BO
++       └─ PC chaining: every task's 4-word tail (PC_BASE_ADDRESS,
++          PC_REGISTER_AMOUNTS, op-enable, broadcast) is patched with the
++          next task's address/amount, across operations too.  The whole
++          graph is ONE drm_rocket_job; the PC unit walks the chain and
++          raises a single interrupt (last_int_mask, uapi extension).
++  └─ rkt_ml_subgraph_invoke()               rkt_ml.c
++       packs the input into 8-channel surfaces, submits, waits
++  └─ rkt_ml_subgraph_read_outputs()         unpacks the output surfaces
++```
++
++BO lists of the job: `in` = tensors with no producer inside the
++partition, `out` = every operation's output.  Intermediate tensors go in
++NEITHER list and a handle must not appear twice — a duplicate or an
++in+out overlap wedges the scheduler silently (Test 41, 59).
++
++## 2. Memory conventions
++
++- **Axes**: width = `dims[2]` (the contiguous memory row), height =
++  `dims[1]`.  The RK3588 path mixed them; that was self-consistent only
++  on square maps and corrupted every non-square one (Test 68).
++- **Feature surfaces**: 8 channels x 8 bytes per pixel, planar per
++  surface.  Line stride = W*8 bytes, surface stride = align(W*H, 4)*8
++  bytes (the align-4 is what killed the 7x7 flakiness: 49 -> 52,
++  Test 57).  CNA/DPU stride registers are in 8-byte units (16 on
++  RK3588).  A band task that starts mid-tensor addresses its slice
++  through `RDMA_SURF_NOTCH` = surface stride − W*H_band*8 (Test 55).
++- **First layer (C=3)**: packed ARGB, one 32-bit pixel, CVT shifts by
++  −128 (Test 46).
++- **Weights** (`rkt_fill_weights`): 16-kernel groups, tap-major inside
++  a group, 32-channel input slices with compact tails for partial
++  slices and partial kernel groups (Test 43, 44).  Depthwise: 32-channel
++  groups, tap rows strided by align16 (Test 66).
++- **int8**: the NPU only ever sees uint8.  Teflon shifts int8 zero
++  points by 128 and the delegate XORs the data with 0x80 (Test 71).
++  Biases stay int32.
++
++## 3. Requantization — the DPU BS stream
++
++Per output channel the DPU reads an 8-byte record from the BS stream:
++`[bias int32][ow int16][mul int16]`.
++
++- per-tensor weights: bias-only stream (`BS_CFG 0x158`), `ow` and the
++  multiplier come from registers;
++- per-channel weights: full stream (`BS_CFG 0x148`, `BS_MUL_CFG 0xe01`,
++  OW source = stream): `ow = 0x80 − wzp`, `mul = round(2^14 *
++  s_wc / s_wmax)` renormalizes each channel to the layer scale that
++  `OUT_CVT` runs off (Test 71);
++- `OUT_CVT` scale is a 15-bit float (exp + 14-bit mantissa with an
++  implicit leading 1).  Rounding may carry into the exponent — a scale a
++  hair under a power of two otherwise ends up at half value (Test 72).
++- `DPU_RDMA 0x5024` (not in the XML) = BS stream length in 8-byte words
++  minus one; without it the bias RDMA fetches nothing (Test 71).
++- fused add: the second operand comes through the EW stage with its own
++  scale (`EW_CFG`, `EW_CVT_*`); a depthwise host is never used for a
++  fused add (Test 72).
++
++## 4. Things that look arbitrary but are load-bearing
++
++Each of these cost hours; none is derivable from the TRM.  Change them
++only with a vendor capture to compare against.
++
++| what | why | test |
++|---|---|---|
++| `CNA_DMA_CON0 = 0x00171c07` written verbatim | bit 20 is RESERVED in the XML; assembling from fields drops it and the MAC then emits a constant | 29/30 |
++| one broadcast op-enable word starts all units (`0x0041…`/`0x0081…` tail) | per-unit enables race the ping-pong register banks; the broadcast is the vendor's cure for the phase bug | 42 |
++| PPU chunk lives in the BO of the PRECEDING task | the PC fetches the pool words from the same descriptor run; a separate BO never signals | 60/61 |
++| `POOLING_PADDING_CFG 0x6040` carries all four paddings | a pooling window not covered by input+padding starves the PPU forever and stalls the whole chain | 61 |
++| CBUF entry count from the DECLARED channels (align 32) | the bank wraps otherwise; showed up as the mp56 tail | 65 |
++| PPU `CUBE_IN` clipped to the rows/columns actually consumed | the window starves on the unclipped cube | 65 |
++| depthwise with C<32 declares a full 32-group | with the real 16 announced the pipeline produces nothing | 66 |
++| identity copy for a depthwise leg only when C%32==0 | a depthwise copy with C<32 writes padding surfaces over the neighbouring concat slice | 64/69 |
++| `FEATURE_GRAINS = stride+kh + stride*((Wout<28)+(Wout<14))` | the plain value starts the MAC before the first weight group is in CBUF on narrow maps | 53 |
++| `CORE` block map one slot lower than the XML | the XML has a spurious `MAC_GATING` at 0x300c; `CMAC MISC_CFG` is 0x200c | 28/29 |
++| `KERNEL_GROUP` = 0 always | the RK3588 formula underflows on depthwise | 30/31 |
++| pad value in the upper half of `PAD_CON0` | `PAD_CON1` is never written by the vendor | 30/31 |
++| kernel: core reset + IOMMU re-arm with `ENABLE_PAGING=0` on the wedge | the ping-pong bank state machine sticks after a timeout; a re-arm with paging on hangs the SoC | 40 |
++| kernel: GFP_DMA32 for page tables and BOs | the NPU addresses 32 bits; no `mem=4G` needed | 58 |
++| MAC clock from SCMI (`scmi_rate`), not the CRU clock | the CRU `npu` clock is decorative; the PVTPLL rate is what the MAC runs at | 67 |
++
++## 5. How to debug
++
++Knobs (all environment variables, read by the delegate):
++
++| knob | effect |
++|---|---|
++| `RKT_DUMP=1` | print every emitted regcmd word to stderr — feed `tools/rknn_diff.py` against a vendor `.rknn` |
++| `RKT_WDUMP=<file>` | dump the packed weight buffer |
++| `RKT_NO_CHAIN=1` | one job per operation instead of one per graph |
++| `RKT_NO_PPU=1` | pooling through the depthwise lowering / CPU |
++| `RKT_MULSH=<n>` | shift the OUT_CVT scale by n — separates scale errors from addressing errors |
++| `RKT_MAXROWS=<n>` | cap the band height — forces multi-band pipelines on small probes |
++| `RKT_POOL_INT_MASK=<m>` | interrupt mask of the last PPU task |
++| `ROCKET_DEBUG=dump_bos` | dump every BO (weights, biases, regcmd, tensors) to files |
++| `TEFLON_MAX_OPS` / `TEFLON_MIN_OPS` | delegate a window of graph nodes |
++
++Method that worked, in order of cost:
++
++1. `tests/suite.py <probe.tflite>` — seven input patterns.  Uniform
++   fills separate arithmetic from addressing (a wrong stride shows on
++   gradients only); channel-coded inputs show which surface went
++   where.  A probe at max ≤ 1 LSB is "clean".
++2. When a probe is wrong, build the smallest geometric series that
++   flips it (rect vs square, C=16/24/28/32, stride 1/2) and read the
++   diff map — which rows/channels are hit — before theorizing.
++3. `RKT_DUMP` + `tools/rknn_diff.py` against the vendor stream of the
++   same layer (`tools/rknn_regcmd.py` extracts it from a `.rknn`).
++   Registers that differ are the suspects; registers the vendor writes
++   and we don't are the usual culprits.
++4. For a vendor reference without the vendor stack running:
++   `capture/capture.c` (LD_PRELOAD on the vendor runtime) records the
++   regcmd + BOs, `tests/replay.c` replays them through rocket.  A
++   vendor stream replayed through our kernel path must match EXACTLY;
++   if it does, the environment is clean and the bug is in our stream.
++5. Offline `.rknn` probes need rknn-toolkit2 on x86 (qemu-user or a
++   cloud x86 box); the generator scripts are in the author's notes.
++
++## 6. Kernel module
++
++`module/` in https://github.com/iav/rk3568-npu is the in-tree
++`drivers/accel/rocket` (7.2-rc7) plus: RK3568 compatible and variant
++data (dma_bits, pc_data_amount_scale), GFP_DMA32 BOs, the wedge
++recovery (core reset + manual IOMMU re-arm in `hw_submit`), the PC
++task-DMA descriptor submit with a single final interrupt
++(`last_int_mask` in `struct drm_rocket_job` — this branch and the
++module must be built from matching revisions), the `scmi_rate`
++parameter (800 MHz default).  The IOMMU page-table DMA32 patch is in
++the kernel itself (`rockchip-iommu.c`, see the release .debs).
 -- 
 2.53.0
 

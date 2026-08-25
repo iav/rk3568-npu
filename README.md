@@ -88,6 +88,8 @@ maps and corrupted every non-square one.
 | `tests/` | probe-layer test harness (`suite.py`, `suite_i8.py` for int8 probes), mobilenet comparison (`mob.py`), single-layer oracle (`run7.py`), vendor-capture replay tool (`replay.c`) |
 | `models/` | pre-generated quantized single-layer .tflite probes |
 | `capture/` | LD_PRELOAD shim used to capture vendor command streams for comparison (needs the vendor stack, only for further RE work) |
+| `tools/` | `rknn_regcmd.py` (extract + decode the vendor command stream from a .rknn), `rknn_diff.py` (diff an `RKT_DUMP` stream against it) |
+| `README-rk3568.md` | map of the driver for the next reader: data flow, memory conventions, BS-stream requantization, the load-bearing settings with their lab-log test numbers, debug knobs (copy of the file in the Mesa branch) |
 
 Mesa branch: https://github.com/iav/mesa tree `rk3568-test-session-20260820`
 (based on mesa upstream + the RK3568 draft from
@@ -176,9 +178,9 @@ max ≤ 1. `mob.py` needs `mobilenet_v1_1.0_224_quant.tflite` (the classic
 TFLite hosted model); point it at another model with
 `MOBILENET=<path>` — `mobilenet_v2_1.0_224_quant.tflite` works too.
 
-Debug knobs: `TEFLON_MAX_OPS`/`TEFLON_MIN_OPS` (delegate a window of graph
-nodes), `RKT_DUMP=1` (print the emitted command stream), `RKT_WDUMP=<f>`
-(dump the packed weight buffer), `ROCKET_DEBUG=dump_bos`, `RKT_MAXROWS`.
+Debug knobs: see the table in `README-rk3568.md` (`RKT_DUMP`, `RKT_WDUMP`,
+`RKT_NO_CHAIN`, `RKT_NO_PPU`, `RKT_MULSH`, `RKT_MAXROWS`, `RKT_POOL_INT_MASK`,
+`ROCKET_DEBUG=dump_bos`, `TEFLON_MAX_OPS`/`TEFLON_MIN_OPS`).
 
 ## Known limitations
 
