@@ -41,6 +41,10 @@ struct rocket_core {
 	/* TEST: NPU MMU regs, for the AUTO_GATING bit31 workaround */
 	void __iomem *mmu_iomem;
 	void __iomem *dpu_iomem;
+	/* DPU lookup tables currently loaded (drm_rocket_job lut_data):
+	 * identical tables across jobs are not rewritten. */
+	u16 lut_cache[1030];
+	bool lut_valid;
 	void __iomem *top_iomem; /* TEST: 0xfde48000 top DMA counters */	/* TEST: 0xfde44000 DPU + DPU_RDMA */
 	/* TEST: domain kept attached across jobs (vendor-RFC style);
 	 * holds a kref so the domain cannot be freed while attached.

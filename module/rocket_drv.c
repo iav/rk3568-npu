@@ -263,6 +263,9 @@ static int rocket_device_runtime_resume(struct device *dev)
 		return err;
 	}
 
+	/* The DPU lookup tables do not survive the power gate. */
+	rdev->cores[core].lut_valid = false;
+
 	return 0;
 }
 

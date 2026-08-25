@@ -220,4 +220,7 @@ void rocket_core_reset(struct rocket_core *core)
 	udelay(10);
 
 	reset_control_bulk_deassert(ARRAY_SIZE(core->resets), core->resets);
+
+	/* The DPU lookup tables are gone with the reset. */
+	core->lut_valid = false;
 }

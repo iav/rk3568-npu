@@ -7,6 +7,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include "include/uapi/drm/rocket_accel.h"
+#include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
@@ -115,6 +116,10 @@ MODULE_PARM_DESC(rocket_open_mask, "TEST: unmask all interrupts (0x1ffff) on cha
 
 static int rocket_desc_walk;
 module_param(rocket_desc_walk, int, 0644);
+
+static int rocket_lut_settle_us = 50;
+module_param(rocket_lut_settle_us, int, 0644);
+MODULE_PARM_DESC(rocket_lut_settle_us, "settle time after loading the DPU lookup tables (us)");
 MODULE_PARM_DESC(rocket_desc_walk, "TEST: program TASK_DMA_BASE_ADDR so the PC walks the task-descriptor array (vendor mode)");
 
 /* Reset the core AND re-arm the NPU MMU.  reset_control wipes the MMU
@@ -154,21 +159,6 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 
 	/* TEST (iav RE, 2026-08-22): unit state before each submit --
 	 * S_POINTER bit16 = executer engaged, TASK_STATUS = task counter. */
-	/* DPU lookup tables for the job (SiLU and friends): the LUT is a
-	 * single, non-banked resource behind LUT_ACCESS_CFG (0x4100: bit 17
-	 * write, bit 16 table, [9:0] address) / LUT_ACCESS_DATA (0x4104,
-	 * auto-increment).  Loading it from the command stream is unreliable
-	 * -- only the first DPU-only task of a chain lands its writes (RE-LOG
-	 * Test 75) -- so userspace hands the contents over and they are
-	 * written here, while the unit is idle. */
-	if (job->lut && core->dpu_iomem) {
-		int t, k;
-		for (t = 0; t < 2; t++) {
-			writel(0x20000 | (t << 16), core->dpu_iomem + 0x100);
-			for (k = 0; k < 515; k++)
-				writel(job->lut[t * 515 + k], core->dpu_iomem + 0x104);
-		}
-	}
 	dev_dbg(core->dev,
 		"TEST pre-submit: cna_sp=%08x core_sp=%08x dpu_sp=%08x rdma_sp=%08x task_status=%08x raw=%08x mmu_dte=%08x mmu_status=%08x\n",
 		rocket_cna_readl(core, S_POINTER),
@@ -202,6 +192,33 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 
 		task = &job->tasks[0];
 		job->next_task_idx = 0;	/* reused as the done-task counter */
+
+		/* DPU lookup tables for the job (SiLU and friends): the LUT is
+		 * a single, non-banked resource behind LUT_ACCESS_CFG (0x4100:
+		 * bit 17 write, bit 16 table, [9:0] address) / LUT_ACCESS_DATA
+		 * (0x4104, auto-increment).  Loading it from the command stream
+		 * is unreliable -- only the first DPU-only task of a chain lands
+		 * its writes (RE-LOG Test 75) -- so userspace hands the contents
+		 * over and they are written here, after any reset and right
+		 * before the chain starts, while the unit is idle. */
+		if (job->lut && core->dpu_iomem &&
+		    (!core->lut_valid ||
+		     memcmp(core->lut_cache, job->lut, sizeof(core->lut_cache)))) {
+			int t, k;
+			for (t = 0; t < 2; t++) {
+				writel(0x20000 | (t << 16), core->dpu_iomem + 0x100);
+				for (k = 0; k < 515; k++)
+					writel(job->lut[t * 515 + k], core->dpu_iomem + 0x104);
+			}
+			/* Drain the posted writes and give the table SRAM time to
+			 * settle before the PC starts: the first pixels of a chain
+			 * started right behind the load read a half-written table
+			 * (layer-c2f-add row-0 flakes, RE-LOG Test 76). */
+			(void)readl(core->dpu_iomem + 0x100);
+			udelay(rocket_lut_settle_us);
+			memcpy(core->lut_cache, job->lut, sizeof(core->lut_cache));
+			core->lut_valid = true;
+		}
 
 		rocket_pc_writel(core, BASE_ADDRESS, 0x1);
 		/* The vendor commit path on RK356x does NOT touch the unit

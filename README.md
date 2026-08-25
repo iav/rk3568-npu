@@ -5,7 +5,7 @@ components: the mainline `accel/rocket` kernel driver (with local fixes)
 and a Mesa Teflon (TFLite delegate) branch. No librknnrt, no vendor
 runtime.
 
-Status (2026-08-25, evening):
+Status (2026-08-25, night):
 
 - single-operation probe layers (regular, depthwise, stride-2,
   3-channel first layer, fully-connected, concat, standalone add —
@@ -39,11 +39,19 @@ Status (2026-08-25, evening):
   a pointwise identity-copy host;
 - SiLU (x * sigmoid(x), TFLite CONV -> LOGISTIC -> MUL) is fused into the
   convolution through the DPU lookup table, the vendor's ConvExSwish
-  path: probe layers within 2 LSB of the CPU reference, yolov8n_int8
-  delegates all 57 of its SiLU activations.  The tables travel with the
-  job (uapi `lut_data`, see below) and the kernel writes them through
-  MMIO -- loading them from the command stream lands only the first
-  table (RE-LOG Test 75); a depthwise host reads the second
+  path: probe layers within 1 LSB of the CPU reference.  The tables
+  travel with the job (uapi `lut_data`, see below) and the kernel writes
+  them through MMIO -- loading them from the command stream lands only
+  the first table (RE-LOG Test 75);
+- **yolov8n_int8 (320x320) runs end to end**: the backbone, neck and the
+  three detection heads on the NPU, only the input quantize/transpose,
+  the two nearest-neighbour upsamples and the [1, 84, 2100] DFL tail on
+  the CPU.  On bus.jpg the NPU produces the same five detections as the
+  CPU (boxes, classes, scores; raw output mean diff 3e-4): **27 ms vs
+  69 ms** CPU-only (XNNPACK, four A55).  C2f's channel SLICE, the
+  int8->int8 QUANTIZE on concat legs and the explicit PAD before
+  stride-2 convolutions are handled as addressing / producer
+  retargeting, with no copies (`tests/yolo_cmp.py`, RE-LOG Test 76); a depthwise host reads the second
   operand with the wrong surface walk and is never chosen;
 - the MAC array runs at 800 MHz (the vendor's own RK3568 operating
   point; the driver default used to be 600 MHz — see the `scmi_rate`
@@ -213,7 +221,15 @@ Debug knobs: see the table in `README-rk3568.md` (`RKT_DUMP`, `RKT_WDUMP`,
 - Timings above are at the NPU clock pinned to 800 MHz via SCMI;
   "bit-identical" means same board, fixed clock, repeated runs.
 - Debug/rollback knobs: `RKT_NO_CHAIN=1` (per-task submit),
-  `RKT_NO_PPU=1` (pooling on CPU / dw-conv path).
+  `RKT_NO_PPU=1` (pooling on CPU / dw-conv path), `RKT_TASKS=1` (print
+  the band split of every operation).
+- Known: in about 2% of fresh runs of `layer-c2f-add` one pixel of row 0
+  is computed through stale input -- a consumer starting right behind a
+  tiny producer inside the PC chain (`RKT_NO_CHAIN=1` is clean).  Under
+  investigation; the vendor's DPU-only "copy" tasks between operations
+  look like the drain barrier this needs.
+- Maps wider or taller than 2047 pixels stay on the CPU (11-bit size
+  fields); tensors of rank other than 4 are not delegated.
 
 ## References
 

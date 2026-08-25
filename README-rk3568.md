@@ -112,6 +112,11 @@ only with a vendor capture to compare against.
 | DPU LUT tables written by the kernel (uapi `lut_data`), not by DPU-only loader tasks | only the first DPU-only task of a chain lands its LUT_ACCESS_DATA writes; the vendor's two-loader layout loses one table | 75 |
 | LO table domain starts at -512 with `LUT_CFG 0x28` (LE priority in the overlap) | the first ~5 LO entries return LO[512]·(x+8)/256 instead of the table | 75 |
 | BN multiplier shift field = the shift itself; `RKT_MULSH` also scales the BS multiplier | measured with ramp tables at five LUT scales; the knob interplay cost a day of wrong conclusions | 75 |
+| LUT entry i is word i (no leading word) | the vendor's leading zero word reads every entry one bin late: ~1.3 LSB on the steep positive branch | 76 |
+| a band consumes `(out_h-1)*stride + kh - pad_top` rows, never minus `pad_bottom` | with a top pad and an odd stride phase the bottom pad is never reached; subtracting it lost the last output row of padded 320x320 layers | 76 |
+| a SiLU convolution never hosts a fused add | its EW stage is the lookup table; a pointwise identity copy hosts the add instead | 76 |
+| maps wider/taller than 2047 stay on the CPU | 11-bit CNA/CORE size fields (yolo's 4x2100 DFL convolution) | 76 |
+| the kernel loads the LUT right before the chain starts, +50 us, and skips identical tables | a chain started behind the load read a half-written table; the SRAM is lost across runtime suspend and reset (cache invalidated there) | 76 |
 
 ## 5. How to debug
 
@@ -126,6 +131,7 @@ Knobs (all environment variables, read by the delegate):
 | `RKT_MULSH=<n>` | shift the OUT_CVT scale by n — separates scale errors from addressing errors |
 | `RKT_MAXROWS=<n>` | cap the band height — forces multi-band pipelines on small probes |
 | `RKT_POOL_INT_MASK=<m>` | interrupt mask of the last PPU task |
+| `RKT_TASKS=1` | print every operation's band split (top/bottom slice, pads, output rows) |
 | `ROCKET_DEBUG=dump_bos` | dump every BO (weights, biases, regcmd, tensors) to files |
 | `TEFLON_MAX_OPS` / `TEFLON_MIN_OPS` | delegate a window of graph nodes |
 
