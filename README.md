@@ -131,11 +131,15 @@ user_overlays=rk3568-npu-test
 ```
 
 The NPU cannot reach physical memory above 4 GiB. Two patches cover this:
-page tables are constrained by a GFP_DMA32 patch already included in the
-released kernel .debs (`iommu_data_ops_v2` in `rockchip-iommu.c`), and BO
-pages by a DMA32 gfp mask in `module/rocket_gem.c`. With both in place
-the full 8 GB stays usable. If you run an unpatched module, add `mem=4G`
-to `extraargs` instead — otherwise jobs die with `DMA_READ_ERROR`.
+page tables are constrained by a GFP_DMA32 patch (`iommu_data_ops_v2` in
+`rockchip-iommu.c`) that is included in the released kernel .debs and
+shipped as `kernel-patches/iommu-rockchip-force-gfp-dma32-for-v2-page-tables.patch`
+for building your own kernel (Armbian: drop it into
+`userpatches/kernel/archive/rockchip64-7.2/`; mainline 7.2 still has
+`.gfp_flags = 0`), and BO pages by a DMA32 gfp mask in
+`module/rocket_gem.c`. With both in place the full 8 GB stays usable. If
+you run an unpatched module, add `mem=4G` to `extraargs` instead —
+otherwise jobs die with `DMA_READ_ERROR`.
 
 Build and install the overlay:
 

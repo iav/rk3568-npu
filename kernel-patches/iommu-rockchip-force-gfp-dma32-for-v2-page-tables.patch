@@ -1,0 +1,40 @@
+From: Jiaxing Hu <huhuvmb88@outlook.com>
+Date: Mon, 7 Jul 2026 12:00:00 +1200
+Subject: [PATCH] iommu/rockchip: force GFP_DMA32 for v2 page tables
+
+The RK3566/RK3568 IOMMU v2 hardware cannot fetch a page table located
+above 4 GB, but iommu_data_ops_v2 left .gfp_flags = 0, so on boards with
+more than 4 GB of RAM the NPU IOMMU bus-errors: the walker reads garbage
+and the NPU command processor never fetches a single command.
+
+Set GFP_DMA32 like the v1 ops. Harmless on SoCs (RK3576/RK3588) whose v2
+hardware can reach above 4 GB.
+
+Taken from https://github.com/gahingwoo/kiln (kernel-patches-rk3568).
+Local motivation: NPU bring-up on ODROID-M1 (RK3568, 8 GB), where the
+page-table directory landed at 0x1_ad38f000 and the fetch failed. Without
+this the only workaround is booting with mem=4G.
+
+Signed-off-by: Jiaxing Hu <huhuvmb88@outlook.com>
+---
+ drivers/iommu/rockchip-iommu.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/iommu/rockchip-iommu.c b/drivers/iommu/rockchip-iommu.c
+--- a/drivers/iommu/rockchip-iommu.c
++++ b/drivers/iommu/rockchip-iommu.c
+@@ -1366,7 +1366,13 @@ static struct rk_iommu_ops iommu_data_ops_v2 = {
+ 	.mk_dtentries = &rk_mk_dte_v2,
+ 	.mk_ptentries = &rk_mk_pte_v2,
+ 	.dma_bit_mask = DMA_BIT_MASK(40),
+-	.gfp_flags = 0,
++	/*
++	 * The v2 DTE format encodes >32-bit page-table addresses, but the
++	 * RK3566/RK3568 IOMMU v2 hardware cannot actually fetch a page table
++	 * located above 4 GB -- doing so bus-errors the NPU. Force page tables
++	 * into the DMA32 zone like v1. Harmless on SoCs that can reach >4GB.
++	 */
++	.gfp_flags = GFP_DMA32,
+ };
+
+ static const struct of_device_id rk_iommu_dt_ids[] = {
