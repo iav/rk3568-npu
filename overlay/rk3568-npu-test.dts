@@ -37,6 +37,11 @@
 		reg = <6>;
 		clocks = <&cru 39>, <&cru 37>, <&cru 38>;
 		/*
+		 * The Rockchip power-domain driver (7.3+) enables this rail
+		 * before powering the domain on.
+		 */
+		domain-supply = <&vdd_npu>;
+		/*
 		 * No pm_qos here on purpose. rockchip_pd_power() reads the QoS
 		 * registers (qos@fe180000) before powering the domain down, and
 		 * those live inside the NPU rail: with vdd_npu still off (the
